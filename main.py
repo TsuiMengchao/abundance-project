@@ -1,8 +1,6 @@
-import logging
-
-from common.log.annotation.Slf4j import Slf4j
-from cxframework.AbundanceApplication import AbundanceApplication
-from pyqt.PyqtRun import PyQtRun
+from abundance_common.log.annotation.Slf4j import Slf4j
+from abundance_framework.AbundanceApplication import AbundanceApplication
+from abundance_pyqt.PyqtRun import PyQtRun
 
 @Slf4j
 class Main:

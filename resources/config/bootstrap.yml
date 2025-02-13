@@ -19,7 +19,7 @@ logging:
   datefmt: '%Y-%m-%d %H:%M:%S'
   file:
     name: abundance.log
-    path: log/
+    path: logs/
     max-size: 10MB
     max-history: 30
   pattern:

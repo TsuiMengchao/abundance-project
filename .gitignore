@@ -1,6 +1,6 @@
 pyqt5ui
 pyqt6ui
-log/*.log
+logs/*.log
 
 # local env files
 venv
