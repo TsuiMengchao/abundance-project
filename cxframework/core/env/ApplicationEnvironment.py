@@ -1,7 +1,15 @@
 class ApplicationEnvironment:
-    def __init__(self):
-        # 这里可以初始化一些环境相关的属性，比如属性源等，暂时先空着，可按需扩展
-        self.property_sources = None
+    # 类属性，用于保存单例实例
+    _instance = None
+
+    def __new__(cls):
+        # 如果实例还未创建，则创建一个新实例
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            # 在这里进行初始化操作
+            cls._instance.property_sources = None
+            cls._instance.is_initialized = False  # 新增初始化标志
+        return cls._instance
 
     def get(self, key_path=None, default=None):
         """

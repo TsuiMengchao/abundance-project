@@ -8,7 +8,7 @@ class Slf4j:
         """
         self.cls = cls
         # 获取类所在模块的日志记录器，并添加到类属性中，属性名为 'log'
-        self.cls.log = logging.getLogger(self.cls.__module__)
+        self.cls.log = logging.getLogger(self.cls.__name__)
 
     def __call__(self, *args, **kwargs):
         """

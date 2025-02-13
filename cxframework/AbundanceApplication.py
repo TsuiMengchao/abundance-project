@@ -2,10 +2,11 @@ import inspect
 import logging
 
 from cxframework.banner.AbundanceApplicationBannerPrinter import AbundanceApplicationBannerPrinter
-from cxframework.core.environment.ApplicationEnvironment import ApplicationEnvironment
+from cxframework.core.env.ApplicationEnvironment import ApplicationEnvironment
 from cxframework.banner.BannerMode import BannerMode
-from cxframework.load.PropertyLoader import PropertyLoader
-from cxframework.load.ResourceLoader import ResourceLoader
+from cxframework.loader.PropertyLoader import PropertyLoader
+from cxframework.loader.ResourceLoader import ResourceLoader
+from cxframework.log.LoggingSetup import LoggingSetup
 from cxframework.util.StopWatch import StopWatch
 
 
@@ -58,9 +59,10 @@ class AbundanceApplication:
 
         try:
             environment = self.prepare_environment()
+            LoggingSetup(environment)
             self.printBanner(environment)
         except Exception as e:
-            print(e)
+            self.logger.error(f"运行时发生错误: {e}")
         stopWatch.stop()
         self.stopWatch = stopWatch
 
@@ -79,21 +81,19 @@ class AbundanceApplication:
 
         return environment
 
-
     def getOrCreateEnvironment(self):
-        if self.environment != None:
+        if self.environment is not None:
             return self.environment
         else:
-            return ApplicationEnvironment()
+            # 使用单例模式获取 ApplicationEnvironment 实例
+            self.environment = ApplicationEnvironment()
+            return self.environment
 
     def printBanner(self, environment):
         if self.banner_mode == BannerMode.OFF:
             return None
         else:
-            if self.resourceLoader != None:
-                resourceLoader = self.resourceLoader
-            else:
-                resourceLoader = ResourceLoader()
+            resourceLoader = self.resourceLoader or ResourceLoader()
 
             bannerPrinter = AbundanceApplicationBannerPrinter(resourceLoader, self.banner)
             if self.bannerMode == BannerMode.LOG:

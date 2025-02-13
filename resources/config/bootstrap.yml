@@ -10,40 +10,19 @@ abundance:
     charset: UTF-8
     location: resources/banner.txt
 
-# 开发环境配置
-server:
-  servlet:
-    # 应用的访问路径
-    context-path: /
-
 # 日志配置
 logging:
   level:
-    abundance: debug
-    me.mcx.cxframework: warn
+    root: DEBUG
+    cxframework: WARNING
+  format: '%(levelname)s %(asctime)s [%(filename)s:%(lineno)d] %(message)s'
+  datefmt: '%Y-%m-%d %H:%M:%S'
+  file:
+    name: abundance.log
+    path: log/
+    max-size: 10MB
+    max-history: 30
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
-# abundance配置
-abundance:
-  datasource:
-    druid:
-      # 主库数据源
-      master:
-        url:
-      # 配置检测连接是否有效
-      validationQuery: SELECT 1 FROM DUAL
-  # 资源信息
-  messages:
-    # 国际化资源文件路径
-    basename: static/i18n/messages
-  jackson:
-    time-zone: GMT+8
-    date-format: yyyy-MM-dd HH:mm:ss
-  profiles:
-    active: druid
-  # 文件上传
-  servlet:
-    multipart:
-      # 单个文件大小
-      max-file-size: 10MB
-      # 设置总上传的文件大小
-      max-request-size: 20MB

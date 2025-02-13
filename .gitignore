@@ -1,4 +1,6 @@
-
+pyqt5ui
+pyqt6ui
+log/*.log
 
 # local env files
 venv
