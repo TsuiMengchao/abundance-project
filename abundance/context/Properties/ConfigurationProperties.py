@@ -1,4 +1,4 @@
-from abundance_framework.core.env.ApplicationEnvironment import ApplicationEnvironment
+from abundance.core.env.ApplicationEnvironment import ApplicationEnvironment
 
 def ConfigurationProperties(prefix):
     def decorator(cls):

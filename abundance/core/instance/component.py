@@ -1,7 +1,7 @@
 # instance/component.py
 from typing import Type
 
-from abundance_framework.core.instance.instance_container import Instance
+from abundance.core.instance.instance_container import Instance
 
 class component:
 

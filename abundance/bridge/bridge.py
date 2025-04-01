@@ -1,5 +1,5 @@
-from abundance_framework.core.instance.instance_container import InstanceContainer
-from abundance_framework.bridge.route import ROUTE_MAPPING
+from abundance.core.instance.instance_container import InstanceContainer
+from abundance.bridge.route import ROUTE_MAPPING
 
 class Bridge:
     SERVICE_INSTANCES = {}

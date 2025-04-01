@@ -1,4 +1,4 @@
-from abundance_framework.pyqt.router import Router
+from abundance.pyqt.router import Router
 from abundance_pyqt.src.router.modules.page import page_routes
 
 

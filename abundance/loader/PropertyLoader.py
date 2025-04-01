@@ -3,7 +3,7 @@ import yaml
 import json
 import logging
 
-from abundance_framework.util.data_utils import merge_data
+from abundance.util.data_utils import merge_data
 
 logger = logging.getLogger(__name__)
 

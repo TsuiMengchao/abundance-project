@@ -1,6 +1,6 @@
 import logging
 import os
-from abundance_framework.loader.Resource import Resource
+from abundance.loader.Resource import Resource
 
 logger = logging.getLogger(__name__)
 

@@ -1,14 +1,14 @@
 import inspect
 import logging
 
-from abundance_framework.banner.AbundanceApplicationBannerPrinter import AbundanceApplicationBannerPrinter
-from abundance_framework.core.env.ApplicationEnvironment import ApplicationEnvironment
-from abundance_framework.banner.BannerMode import BannerMode
-from abundance_framework.core.instance.instance_container import InstanceContainer, Instance
-from abundance_framework.loader.PropertyLoader import PropertyLoader
-from abundance_framework.loader.ResourceLoader import ResourceLoader
-from abundance_framework.log.LoggingSetup import LoggingSetup
-from abundance_framework.util.StopWatch import StopWatch
+from abundance.banner.AbundanceApplicationBannerPrinter import AbundanceApplicationBannerPrinter
+from abundance.core.env.ApplicationEnvironment import ApplicationEnvironment
+from abundance.banner.BannerMode import BannerMode
+from abundance.core.instance.instance_container import InstanceContainer, Instance
+from abundance.loader.PropertyLoader import PropertyLoader
+from abundance.loader.ResourceLoader import ResourceLoader
+from abundance.log.LoggingSetup import LoggingSetup
+from abundance.util.StopWatch import StopWatch
 
 
 class AbundanceApplication:

@@ -1,4 +1,4 @@
-from abundance_framework.bridge.bridge import Bridge
+from abundance.bridge.bridge import Bridge
 
 bridge = Bridge()
 class BridgeUtils:

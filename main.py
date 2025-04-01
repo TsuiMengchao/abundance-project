@@ -1,6 +1,6 @@
 from abundance_common.log.annotation.Slf4j import Slf4j
-from abundance_framework.AbundanceApplication import AbundanceApplication
-from abundance_framework.core.instance.component_scan import ComponentScan
+from abundance.AbundanceApplication import AbundanceApplication
+from abundance.core.instance.component_scan import ComponentScan
 from abundance_pyqt.PyqtRun import PyQtRun
 
 @Slf4j

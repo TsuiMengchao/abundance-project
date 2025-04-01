@@ -1,4 +1,4 @@
-from abundance_framework.pyqt.store import Store
+from abundance.pyqt.store import Store
 
 
 class SettingsStore(Store):

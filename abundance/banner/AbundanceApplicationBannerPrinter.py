@@ -1,7 +1,7 @@
 import os
 import io
 
-from abundance_framework.banner.AbundanceBanner import AbundanceBanner
+from abundance.banner.AbundanceBanner import AbundanceBanner
 from PIL import Image
 
 class AbundanceApplicationBannerPrinter:
