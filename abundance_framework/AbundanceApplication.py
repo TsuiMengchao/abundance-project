@@ -4,6 +4,7 @@ import logging
 from abundance_framework.banner.AbundanceApplicationBannerPrinter import AbundanceApplicationBannerPrinter
 from abundance_framework.core.env.ApplicationEnvironment import ApplicationEnvironment
 from abundance_framework.banner.BannerMode import BannerMode
+from abundance_framework.core.instance.instance_container import InstanceContainer, Instance
 from abundance_framework.loader.PropertyLoader import PropertyLoader
 from abundance_framework.loader.ResourceLoader import ResourceLoader
 from abundance_framework.log.LoggingSetup import LoggingSetup
@@ -59,6 +60,7 @@ class AbundanceApplication:
 
         try:
             environment = self.prepare_environment()
+            self.prepare_container()
             LoggingSetup(environment)
             self.printBanner(environment)
         except Exception as e:
@@ -80,6 +82,20 @@ class AbundanceApplication:
         PropertyLoader(environment)
 
         return environment
+
+    def prepare_container(self):
+        # 组件注册和依赖注入
+        container = InstanceContainer()
+        for component_cls in Instance.registered_components:
+            instance = component_cls()
+            name = component_cls.__name__
+            container.register(name, instance)
+            print(f"Registered component: {name}")
+
+        for component_cls in Instance.registered_components:
+            instance = container.get(component_cls.__name__)
+            print(f"Resolving dependencies for: {component_cls.__name__}")
+            container.resolve_dependencies(instance)
 
     def getOrCreateEnvironment(self):
         if self.environment is not None:

@@ -6,7 +6,7 @@ from PIL import Image
 
 class AbundanceApplicationBannerPrinter:
     BANNER_LOCATION_PROPERTY = "abundance.banner.location"
-    BANNER_IMAGE_LOCATION_PROPERTY = "abundance.banner.image.location"
+    BANNER_IMAGE_LOCATION_PROPERTY = "abundance.banner.image.path"
     DEFAULT_BANNER_LOCATION = "resources"
     DEFAULT_BANNER_NAME = "banner.txt"
     IMAGE_EXTENSION = ["gif", "jpg", "png", "jpeg"]

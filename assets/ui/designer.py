@@ -5,25 +5,27 @@ import sys
 
 def check_and_start_designer(qt_version):
     system = platform.system()
+    # 获取虚拟环境的根目录
+    venv_base = sys.prefix
+
     if qt_version == 5:
         if system == "Windows":
-            designer_path = os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages", "qt5_applications", "Qt", "bin", "designer.exe")
+            designer_path = os.path.join(venv_base, "Lib", "site-packages", "qt5_applications", "Qt", "bin", "designer.exe")
         elif system == "Linux":
-            designer_path = "/usr/bin/designer-qt5"
+            designer_path = os.path.join(venv_base, "bin", "designer-qt5")
         elif system == "Darwin":
             # 这里的 5.x.x 需替换为你实际安装的 Qt5 版本号
-            designer_path = "/Applications/Qt/5.x.x/clang_64/bin/Designer.app/Contents/MacOS/Designer"
+            designer_path = os.path.join(venv_base, "Qt", "5.x.x", "clang_64", "bin", "Designer.app", "Contents", "MacOS", "Designer")
         else:
-            print("不支持的操作系统。")
-            return False
+            raise Exception("不支持的操作系统。")
     elif qt_version == 6:
         if system == "Windows":
-            designer_path = os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages", "qt6_applications", "Qt", "bin", "designer.exe")
+            designer_path = os.path.join(venv_base, "Lib", "site-packages", "qt6_applications", "Qt", "bin", "designer.exe")
         elif system == "Linux":
-            designer_path = "/usr/bin/designer-qt6"
+            designer_path = os.path.join(venv_base, "bin", "designer-qt6")
         elif system == "Darwin":
             # 这里的 6.x.x 需替换为你实际安装的 Qt6 版本号
-            designer_path = "/Applications/Qt/6.x.x/clang_64/bin/Designer.app/Contents/MacOS/Designer"
+            designer_path = os.path.join(venv_base, "Qt", "6.x.x", "clang_64", "bin", "Designer.app", "Contents", "MacOS", "Designer")
         else:
             print("不支持的操作系统。")
             return False

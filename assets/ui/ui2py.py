@@ -47,30 +47,42 @@ if __name__ == "__main__":
         qt6_dir = os.path.join(current_dir, 'pyqt6ui')
         os.makedirs(qt5_dir, exist_ok=True)
         os.makedirs(qt6_dir, exist_ok=True)
+        print(f"Qt5 文件夹已创建: {qt5_dir}")
+        print(f"Qt6 文件夹已创建: {qt6_dir}")
 
         for root, dirs, files in os.walk(current_dir):
             for file in files:
                 if file.endswith('.ui'):
                     ui_file_path = os.path.join(root, file)
                     # 生成 Qt5 的 .py 文件
-                    py_file_path_qt5 = os.path.join(qt5_dir, file[:-3] + '.py')
+                    py_file_path_qt5 = os.path.join(qt5_dir, os.path.relpath(root, current_dir), file[:-3] + '.py')
+                    os.makedirs(os.path.dirname(py_file_path_qt5), exist_ok=True)
                     convert_ui_to_py(ui_file_path, py_file_path_qt5, 'qt5')
                     # 生成 Qt6 的 .py 文件
-                    py_file_path_qt6 = os.path.join(qt6_dir, file[:-3] + '.py')
+                    py_file_path_qt6 = os.path.join(qt6_dir, os.path.relpath(root, current_dir), file[:-3] + '.py')
+                    os.makedirs(os.path.dirname(py_file_path_qt6), exist_ok=True)
                     convert_ui_to_py(ui_file_path, py_file_path_qt6, 'qt6')
     elif has_qt5:
+        qt5_dir = os.path.join(current_dir, 'pyqt5ui')
+        os.makedirs(qt5_dir, exist_ok=True)
         for root, dirs, files in os.walk(current_dir):
             for file in files:
                 if file.endswith('.ui'):
                     ui_file_path = os.path.join(root, file)
-                    py_file_path = os.path.join(root, file[:-3] + '.py')
-                    convert_ui_to_py(ui_file_path, py_file_path, 'qt5')
+                    # 生成 Qt5 的 .py 文件
+                    py_file_path_qt5 = os.path.join(qt5_dir, os.path.relpath(root, current_dir), file[:-3] + '.py')
+                    os.makedirs(os.path.dirname(py_file_path_qt5), exist_ok=True)
+                    convert_ui_to_py(ui_file_path, py_file_path_qt5, 'qt5')
     elif has_qt6:
+        qt6_dir = os.path.join(current_dir, 'pyqt6ui')
+        os.makedirs(qt6_dir, exist_ok=True)
         for root, dirs, files in os.walk(current_dir):
             for file in files:
                 if file.endswith('.ui'):
                     ui_file_path = os.path.join(root, file)
-                    py_file_path = os.path.join(root, file[:-3] + '.py')
-                    convert_ui_to_py(ui_file_path, py_file_path, 'qt6')
+                    # 生成 Qt6 的 .py 文件
+                    py_file_path_qt6 = os.path.join(qt6_dir, os.path.relpath(root, current_dir), file[:-3] + '.py')
+                    os.makedirs(os.path.dirname(py_file_path_qt6), exist_ok=True)
+                    convert_ui_to_py(ui_file_path, py_file_path_qt6, 'qt6')
     else:
         print("系统中未找到 Qt5 或 Qt6，请安装相应的库。")

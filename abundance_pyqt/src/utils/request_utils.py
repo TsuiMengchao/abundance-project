@@ -1,7 +1,10 @@
 # request_utils.py
+import logging
+
 import requests
 
 response = None
+logger = logging.getLogger(__name__)
 
 class RequestUtils:
     @staticmethod
@@ -14,13 +17,13 @@ class RequestUtils:
                 try:
                     return response.json(), None
                 except ValueError as json_err:
-                    print(f"JSON解析错误: {json_err}")
+                    logger.error(f"JSON解析错误: {json_err}")
                     return response.text, f"JSON解析错误: {json_err}"
             elif 'image/png' in response.headers.get('Content-Type', ''):
-                print(f"返回的数据是Content-Type: {response.headers.get('Content-Type')}格式")
+                logger.debug(f"返回的数据是Content-Type: {response.headers.get('Content-Type')}格式")
                 return response.content, None
             else:
-                print(f"返回的数据不是JSON格式，Content-Type: {response.headers.get('Content-Type')}")
+                logger.debug(f"返回的数据不是JSON格式，Content-Type: {response.headers.get('Content-Type')}")
                 return response.text, None
         except requests.exceptions.HTTPError as http_err:
             try:
@@ -52,7 +55,6 @@ class RequestUtils:
         else:
             if on_success:
                 on_success(result)
-            return
         return result, error
 
     @staticmethod

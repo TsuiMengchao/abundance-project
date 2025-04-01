@@ -3,13 +3,17 @@ import sys
 
 from PyQt5 import QtWidgets
 
-from abundance_pyqt.src.PyqtController import PyqtController
+from abundance_pyqt.src.pyqt_app import PyQtApp
+from abundance_pyqt.src.router.index import RouterIndex
 
 
 class PyQtRun:
     def __init__(self):
         app = QtWidgets.QApplication(sys.argv)
 
-        PyqtController()
+        pyqt_app = PyQtApp()
+        router = RouterIndex(pyqt_app)
 
-        os._exit(app.exec_())
+        pyqt_app.use(router)
+
+        sys.exit(app.exec())

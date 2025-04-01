@@ -4,19 +4,19 @@ BASE_URL = "https://api.example.com"
 
 def create_resource(data, headers=None, on_success=None, on_failure=None):
     url = f"{BASE_URL}/resource"
-    RequestUtils.post(url, json=data, headers=headers, on_success=on_success, on_failure=on_failure)
+    return RequestUtils.post(url, json=data, headers=headers, on_success=on_success, on_failure=on_failure)
 
 def read_resource(resource_id, data=None, headers=None, on_success=None, on_failure=None):
     url = f"{BASE_URL}/resource/{resource_id}"
-    RequestUtils.get(url, data=data, headers=headers, on_success=on_success, on_failure=on_failure)
+    return RequestUtils.get(url, data=data, headers=headers, on_success=on_success, on_failure=on_failure)
 
 def update_resource(resource_id, data, headers=None, on_success=None, on_failure=None):
     url = f"{BASE_URL}/resource/{resource_id}"
-    RequestUtils.put(url, json=data, headers=headers, on_success=on_success, on_failure=on_failure)
+    return RequestUtils.put(url, json=data, headers=headers, on_success=on_success, on_failure=on_failure)
 
 def delete_resource(resource_id, data=None, headers=None, on_success=None, on_failure=None):
     url = f"{BASE_URL}/resource/{resource_id}"
-    RequestUtils.delete(url, data=data, headers=headers, on_success=on_success, on_failure=on_failure)
+    return RequestUtils.delete(url, data=data, headers=headers, on_success=on_success, on_failure=on_failure)
 
 # 测试
 if __name__ == "__main__":

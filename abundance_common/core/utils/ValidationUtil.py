@@ -1,3 +1,5 @@
+import os
+
 import validators
 
 
@@ -21,6 +23,20 @@ class ValidationUtil:
     @staticmethod
     def is_url(url):
         return validators.url(url)
+
+    @staticmethod
+    def is_file_path(path):
+        """
+        验证是否为有效的文件地址
+        """
+        try:
+            # 检查路径是否存在
+            if os.path.exists(path):
+                # 检查路径是否指向一个文件
+                return os.path.isfile(path)
+            return False
+        except Exception:
+            return False
 
 if __name__ == '__main__':
 
