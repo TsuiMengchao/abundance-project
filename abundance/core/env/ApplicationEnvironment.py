@@ -1,5 +1,5 @@
 from abundance.core.env.Environment import Environment
-from abundance.util.path_utils import PathUtils
+from abundance.utils.path_utils import PathUtils
 
 
 class ApplicationEnvironment(Environment):

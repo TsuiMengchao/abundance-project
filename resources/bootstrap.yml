@@ -8,7 +8,7 @@ abundance:
   copyrightYear: 2025
   banner:
     charset: UTF-8
-    path: resources/banner.txt
+    path: resources:banner.txt
 
 # 日志配置
 logging:
@@ -19,7 +19,7 @@ logging:
   datefmt: '%Y-%m-%d %H:%M:%S'
   file:
     name: abundance.log
-    location: logs/
+    location: target/logs/
     max-size: 10MB
     max-history: 30
   pattern:

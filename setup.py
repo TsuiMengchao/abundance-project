@@ -6,7 +6,7 @@ setup(
     author='tsuimengchao',
     author_email='tsuimengchao@gmail.com',
     description='A Python framework',
-    long_description=open('README_zh.md', encoding='utf-8').read(),
+    long_description=open('abundance/README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
     license="GPLv3",
     url='https://abundance.zhaohaoyue.love',

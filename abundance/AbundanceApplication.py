@@ -8,7 +8,7 @@ from abundance.core.instance.instance_container import InstanceContainer, Instan
 from abundance.loader.PropertyLoader import PropertyLoader
 from abundance.loader.ResourceLoader import ResourceLoader
 from abundance.log.LoggingSetup import LoggingSetup
-from abundance.util.StopWatch import StopWatch
+from abundance.utils.StopWatch import StopWatch
 
 
 class AbundanceApplication:

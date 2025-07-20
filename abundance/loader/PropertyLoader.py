@@ -3,12 +3,12 @@ import yaml
 import json
 import logging
 
-from abundance.util.data_utils import merge_data
+from abundance.utils.data_utils import merge_data
 
 logger = logging.getLogger(__name__)
 
 class PropertyLoader:
-    default_location = ['resources', 'resources/config', '/']
+    default_location = ['resources', 'resources/config', '']
     default_name = ['application', 'bootstrap']
     default_prefix = ['yaml', 'yml', 'json']
 
