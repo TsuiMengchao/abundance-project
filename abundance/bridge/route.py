@@ -1,5 +1,3 @@
-# autotest_databridge/route.py
-
 # 初始化路由映射表
 ROUTE_MAPPING = {}
 
