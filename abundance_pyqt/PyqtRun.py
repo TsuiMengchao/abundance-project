@@ -1,7 +1,7 @@
 import os
 import sys
 
-from PyQt5 import QtWidgets
+from PyQt6 import QtWidgets
 
 from abundance_pyqt.src.pyqt_app import PyQtApp
 from abundance_pyqt.src.router.index import RouterIndex

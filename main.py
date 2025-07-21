@@ -4,7 +4,7 @@ from abundance.core.instance.component_scan import ComponentScan
 from abundance_pyqt.PyqtRun import PyQtRun
 
 @Slf4j
-@ComponentScan("autotest_databridge")
+@ComponentScan("abundance_databridge")
 class Main:
     def __init__(self):
         AbundanceApplication.run()

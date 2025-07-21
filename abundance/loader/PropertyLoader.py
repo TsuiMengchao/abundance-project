@@ -1,3 +1,4 @@
+import hashlib
 import os
 import yaml
 import json
@@ -8,9 +9,11 @@ from abundance.utils.data_utils import merge_data
 logger = logging.getLogger(__name__)
 
 class PropertyLoader:
+    default_base_locations = ['']
     default_location = ['resources', 'resources/config', '']
     default_name = ['application', 'bootstrap']
     default_prefix = ['yaml', 'yml', 'json']
+    file_list = []
 
     def __init__(self, environment):
         self.sources = None
@@ -20,19 +23,22 @@ class PropertyLoader:
 
 
     def load(self):
-        file_list = []
+
         # 拼接所有可能配置文件列表
-        for location in self.default_location:
-            for name in self.default_name:
-                for prefix in self.default_prefix:
-                    file_path = os.path.join(location, f"{name}.{prefix}")
-                    file_list.append(file_path)
+        for base_location in self.default_base_locations:
+            for location in self.default_location:
+                for name in self.default_name:
+                    for prefix in self.default_prefix:
+                        file_path = os.path.join(base_location, location, f"{name}.{prefix}")
+                        self.file_list.append(file_path)
 
         final_data = None
         # 遍历找到的文件列表
-        for file in file_list:
-            if file in self._file_cache:
-                data = self._file_cache[file]
+        for file in self.file_list:
+            # 生成文件的唯一键
+            file_key = hashlib.md5(file.encode('utf-8')).hexdigest()[:12]
+            if file_key in self._file_cache:
+                data = self._file_cache[file_key]
             else:
                 try:
                     if os.path.exists(file):
@@ -51,7 +57,8 @@ class PropertyLoader:
                                 data = json.load(f)
                         else:
                             continue
-                        self._file_cache[file] = data
+                        self._file_cache[file_key] = data
+                        if not data: continue
                     else:
                         continue
                 except (yaml.YAMLError, json.JSONDecodeError) as e:
