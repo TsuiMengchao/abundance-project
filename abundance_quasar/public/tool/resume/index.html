@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>崔梦超 - Java后端开发简历</title>
+    <style>
+        /* 全局变量定义 */
+        :root {
+            --primary-color: #2c3e50;
+            --text-color: #333;
+            --light-text: #666;
+            --border-color: #ddd;
+            --page-width: 210mm;
+            --page-height: 297mm;
+            --content-margin: 12mm;
+            --font-main: "Microsoft YaHei", "SimHei", sans-serif;
+        }
+
+        /* 基础样式重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-main);
+            line-height: 1.5;
+            color: var(--text-color);
+            background-color: #f5f5f5;
+            font-size: 11.5pt;
+        }
+
+        /* 页面容器 - 模拟A4纸 */
+        .resume-page {
+            width: var(--page-width);
+            min-height: var(--page-height);
+            margin: 0 auto;
+            background-color: white;
+            padding: var(--content-margin);
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        /* 头部（姓名+基本信息+照片）样式 - 核心调整 */
+        .resume-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start; /* 顶部对齐 */
+            margin-bottom: 3mm;
+            padding-bottom: 3mm;
+            border-bottom: 2px solid var(--primary-color);
+            gap: 5mm; /* 左右区域间距 */
+        }
+
+        /* 头部左侧区域（名字+基本信息） */
+        .header-left {
+            flex: 1; /* 占据剩余宽度 */
+            display: flex;
+            flex-direction: column;
+            gap: 2mm; /* 名字和基本信息间距 */
+        }
+
+        .name-title {
+            font-size: 17pt;
+            color: var(--primary-color);
+            font-weight: bold;
+            line-height: 1.2;
+        }
+
+        /* 头部右侧照片区域 */
+        .header-right {
+            flex-shrink: 0; /* 不压缩照片宽度 */
+        }
+
+        .photo-container {
+            width: 35mm;
+            height: 45mm;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .photo-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* 标题样式（调整原有h1/h2/h3样式） */
+        h2 {
+            font-size: 13.5pt;
+            color: var(--primary-color);
+            margin: 6mm 0 3mm 0;
+            border-left: 4px solid var(--primary-color);
+            padding-left: 2.5mm;
+        }
+
+        h3 {
+            font-size: 12.5pt;
+            color: var(--text-color);
+            margin-bottom: 1.5mm;
+        }
+
+        /* 基本信息区域 - 调整样式 */
+        .basic-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2mm;
+            /* 移除原有的border-bottom，因为头部已有边框 */
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+        }
+
+        .info-label {
+            font-weight: bold;
+            min-width: 70px;
+            color: var(--light-text);
+        }
+
+        /* 段落和列表样式 */
+        p {
+            margin-bottom: 2mm;
+            text-align: justify;
+        }
+
+        ul {
+            margin-left: 5mm;
+            margin-bottom: 2mm;
+        }
+
+        li {
+            margin-bottom: 1.5mm;
+        }
+
+        /* 工作经历和项目经验通用样式 */
+        .experience-item, .project-item {
+            margin-bottom: 4mm;
+            padding-bottom: 2mm;
+            border-bottom: 1px dashed var(--border-color);
+        }
+
+        .experience-item:last-child, .project-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .time-period {
+            color: var(--light-text);
+            font-size: 10.5pt;
+            margin-bottom: 1.5mm;
+        }
+
+        .tech-stack {
+            color: var(--light-text);
+            font-size: 10.5pt;
+            margin-bottom: 1.5mm;
+        }
+
+        .project-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        /* 技能列表 */
+        .skills-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2mm;
+        }
+
+        .skill-category {
+            margin-bottom: 1.5mm;
+        }
+
+        .skill-category strong {
+            color: var(--primary-color);
+        }
+
+        /* 链接样式 */
+        a {
+            color: var(--text-color);
+            text-decoration: none;
+        }
+
+        /* 打印专用样式 */
+        @media print {
+            body {
+                background-color: white;
+                margin: 0;
+                padding: 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .resume-page {
+                width: 100%;
+                height: 100%;
+                padding: 0;
+                margin: 0;
+                box-shadow: none;
+            }
+
+            /* 强制A4纸张大小并移除浏览器默认页眉页脚 */
+            @page {
+                size: A4 portrait;
+                margin: var(--content-margin);
+                @top-center {
+                    content: none;
+                }
+                @bottom-center {
+                    content: none;
+                }
+            }
+
+            /* 防止重要内容被分页截断 */
+            section, .experience-item, .project-item {
+                page-break-inside: avoid;
+            }
+
+            /* 隐藏链接地址 */
+            a[href]::after {
+                content: none;
+            }
+
+            /* 隐藏不需要打印的元素 */
+            .no-print {
+                display: none !important;
+            }
+
+            /* 打印时照片样式适配 */
+            .photo-container {
+                border: 1px solid #ccc;
+            }
+        }
+
+        /* 响应式设计 - 适配屏幕查看 */
+        @media screen and (max-width: 210mm) {
+            .resume-page {
+                width: 100%;
+                min-height: auto;
+                padding: 8mm;
+            }
+
+            .basic-info {
+                grid-template-columns: 1fr;
+            }
+
+            .skills-list {
+                grid-template-columns: 1fr;
+            }
+
+            /* 响应式下头部布局调整 */
+            .resume-header {
+                flex-direction: column;
+                gap: 3mm;
+                text-align: center;
+            }
+
+            .header-left {
+                align-items: center;
+            }
+
+            .basic-info {
+                width: 100%;
+            }
+
+            .photo-container {
+                width: 30mm;
+                height: 40mm;
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="resume-page">
+        <!-- 头部区域（姓名+基本信息+照片）- 重构结构 -->
+        <div class="resume-header">
+            <!-- 左侧：名字 + 基本信息 -->
+            <div class="header-left">
+                <div class="name-title">崔梦超</div>
+                <!-- 基本信息 -->
+                <div class="basic-info">
+                    <div class="info-item">
+                        <span class="info-label">求职意向：</span>
+                        <span>Java后端开发</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">工作年限：</span>
+                        <span>5年（2021.06至今）</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">联系电话：</span>
+                        <span>18333191029</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">电子邮箱：</span>
+                        <span>tsuimengchao@qq.com</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">意向城市：</span>
+                        <span>石家庄 / 天津 / 北京</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">政治面貌：</span>
+                        <span>共青团员</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 右侧：照片 -->
+            <div class="header-right">
+                <div class="photo-container">
+                    <!-- 替换为实际照片路径，建议尺寸：宽35mm 高45mm（证件照比例） -->
+                    <img src="img.png" alt="个人照片">
+                </div>
+            </div>
+        </div>
+
+        <!-- 职业概述 -->
+        <section>
+            <h2>职业概述</h2>
+            <ul>
+                <li>拥有3年工业控制上位机开发+2年企业级Java后端开发经验，具备全栈开发能力。</li>
+                <li>精通Spring Boot/Spring Cloud微服务架构，熟练掌握Python、Java多语言开发，熟悉工业通信协议与企业级系统开发流程。</li>
+                <li>持有2项实用新型专利，发表2篇学术论文，获全国大学生数学建模竞赛全国二等奖。</li>
+                <li> 具备良好的跨团队协作能力，能够独立负责项目模块从需求分析到上线交付的全流程工作。</li>
+            </ul>
+        </section>
+
+        <!-- 工作经历 -->
+        <section>
+            <h2>工作经历</h2>
+
+            <div class="experience-item">
+                <h3>河北少昊科技有限公司 | Java后端开发</h3>
+                <div class="time-period">2024.07 - 至今</div>
+                <ul>
+                    <li>负责星地协调资源管理系统后端核心模块开发与运维，参与需求评审、架构设计、编码实现、测试联调及线上问题排查全流程</li>
+                    <li>完成多轮系统功能迭代与老模块升级，支撑多外系统间数据交互与资源调度，保障业务系统平稳运行</li>
+                    <li>快速响应并解决线上故障，优化问题排查流程，提升系统稳定性与可用性</li>
+                    <li>严格遵循公司研发规范，推动代码复用与工程化建设，提升团队开发效率</li>
+                </ul>
+            </div>
+
+            <div class="experience-item">
+                <h3>重庆泰思特科技有限公司 | Python Qt上位机开发</h3>
+                <div class="time-period">2020.09 - 2023.07</div>
+                <ul>
+                    <li>独立负责工业控制类上位机软件的需求对接、方案设计、开发测试与客户交付</li>
+                    <li>完成多个工业设备控制系统开发，实现PLC设备通信、数据可视化、远程控制等核心功能</li>
+                    <li>优化软件性能与用户体验，解决硬件对接中的各类技术问题，保障项目按时交付</li>
+                    <li>沉淀通用组件与开发规范，提升团队整体开发效率</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 核心项目经验 -->
+        <section>
+            <h2>核心项目经验</h2>
+
+            <div class="project-item">
+                <div class="project-title">
+                    <h3>星地协调项目 - 资源管理系统</h3>
+                    <div class="time-period">2024.07 - 至今</div>
+                </div>
+                <div class="tech-stack">技术栈：Spring Cloud、达梦数据库、Kafka、DDS、Feign、Docker、K8s</div>
+                <ul>
+                    <li><strong>项目简介：</strong>面向星地协同场景的企业级资源管理平台，实现各类静态/动态资源的统一管理与跨系统数据交互</li>
+                    <li><strong>核心职责：</strong>
+                        <ul>
+                            <li>负责资源维护模块开发，实现资源的增删改查、批量导入导出功能</li>
+                            <li>对接外系统数据推送与查询接口，开发定时数据推送任务，保障数据一致性</li>
+                            <li>参与系统容器化部署与线上运维，处理生产环境各类问题</li>
+                        </ul>
+                    </li>
+                    <li><strong>项目成果：</strong>支撑多个外系统的资源数据交互，保障核心业务任务正常执行；完成多次功能迭代，均按时高质量上线</li>
+                </ul>
+            </div>
+
+            <div class="project-item">
+                <div class="project-title">
+                    <h3>数字孪生 - 智慧校园平台</h3>
+                    <div class="time-period">2020.11 - 2021.07</div>
+                </div>
+                <div class="tech-stack">技术栈：Vue、Three.js、Spring Boot、MySQL、MQTT、Unity、Eladmin</div>
+                <ul>
+                    <li><strong>项目简介：</strong>基于数字孪生技术的智慧校园管理系统，实现校园三维可视化与物联网设备统一管控</li>
+                    <li><strong>核心职责：</strong>
+                        <ul>
+                            <li>负责校园三维场景搭建与交互开发，实现设备状态实时可视化展示</li>
+                            <li>开发后端API接口，对接海康与阿里云物联网平台，实现数据中转与同步</li>
+                            <li>完成与实验室无人车系统的数据对接，实现无人车调度与状态监控</li>
+                        </ul>
+                    </li>
+                    <li><strong>项目成果：</strong>实现实验室设备的统一管理与远程控制，提升实验室管理智能化水平</li>
+                </ul>
+            </div>
+
+            <div class="project-item">
+                <div class="project-title">
+                    <h3>光固化施工控制系统</h3>
+                    <div class="time-period">2021.10 - 2022.04</div>
+                </div>
+                <div class="tech-stack">技术栈：Python、PyQt5、QSS、Serial、WebSocket</div>
+                <ul>
+                    <li><strong>项目简介：</strong>用于光固化施工设备的工控系统，通过PLC控制设备运行并实时展示状态数据</li>
+                    <li><strong>核心职责：</strong>独立负责Win工控机软件全流程开发，实现串口PLC通信、设备控制、数据可视化及App端数据互通功能</li>
+                    <li><strong>项目成果：</strong>软件交付客户后稳定运行，实现施工过程的自动化控制与实时监控，显著提升施工效率</li>
+                </ul>
+            </div>
+        </section>
+    </div>
+
+    <!-- 第二页内容 -->
+    <div class="resume-page">
+        <!-- 剩余项目经验 -->
+        <section>
+            <div class="project-item">
+                <div class="project-title">
+                    <h3>喷码机赋码软件</h3>
+                    <div class="time-period">2020.03 - 2020.06</div>
+                </div>
+                <div class="tech-stack">技术栈：Python、PyQt、QSS、MySQL、PySerial</div>
+                <ul>
+                    <li><strong>项目简介：</strong>与工业喷码机对接的自动赋码软件，生成唯一编码与二维码并实现数据追溯</li>
+                    <li><strong>核心职责：</strong>独立完成软件需求分析、设计、开发与测试工作</li>
+                    <li><strong>项目成果：</strong>实现喷码机自动赋码、数据存储与查询功能，满足客户生产追溯需求</li>
+                </ul>
+            </div>
+
+            <div class="project-item">
+                <div class="project-title">
+                    <h3>国家大学生学情调查《NCSS》-问卷数据导出分析软件</h3>
+                    <div class="time-period">2020.02 - 2020.04</div>
+                </div>
+                <div class="tech-stack">技术栈：Python、PYQT、MySQL</div>
+                <ul>
+                    <li><strong>项目简介：</strong>为国家大学生学情调查《NCSS》微信小程序配套开发的数据处理分析工具</li>
+                    <li><strong>核心职责：</strong>负责问卷数据导出、处理分析及定制化分析报告生成功能的开发与实现</li>
+                    <li><strong>项目成果：</strong>实现海量问卷数据的快速清洗与统计分析，自动化生成标准化分析报告，大幅提升调研工作效率</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 教育背景 -->
+        <section>
+            <h2>教育背景</h2>
+
+            <div class="experience-item">
+                <h3>重庆第二师范学院 | 计算机科学与技术 | 本科（统招全日制）</h3>
+                <div class="time-period">2022.09 - 2024.06</div>
+                <ul>
+                </ul>
+            </div>
+
+            <div class="experience-item">
+                <h3>重庆电子工程职业学院 | 移动应用开发 | 专科</h3>
+                <div class="time-period">2019.09 - 2022.06</div>
+                <ul>
+                    <li>荣誉：获省市级竞赛奖十余次、国家级奖两次</li>
+                    <li>2021年全国大学生数学建模竞赛全国二等奖（获保送本科资格）、校级卓越技术技能人才-技能专家</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 技能证书与荣誉 -->
+        <section>
+            <h2>技能证书与荣誉</h2>
+            <ul>
+                <li><strong>专利证书：</strong>《一种并联连接机构及发电机组群控管理系统》《一种通讯连接机构》实用新型专利授权</li>
+                <li><strong>论文发表：</strong>《智能网联汽车的应用现状及发展》发表于《科学咨询·科技人文》期刊</li>
+                <li><strong>语言能力：</strong>大学英语四级（CET-4），可熟练阅读英文技术文档</li>
+                <li><strong>竞赛荣誉：</strong>2021年全国大学生数学建模竞赛全国二等奖；省市级竞赛奖十余次，国家级奖两次</li>
+            </ul>
+        </section>
+
+        <!-- 专业技能 -->
+        <section>
+            <h2>专业技能</h2>
+            <div class="skills-list">
+                <div class="skill-category">
+                    <strong>后端技术：</strong>熟练掌握Java、Python编程语言；精通Spring Boot、Spring Cloud微服务架构；熟悉Flask框架
+                </div>
+                <div class="skill-category">
+                    <strong>前端技术：</strong>熟练掌握Vue、JavaScript；了解Three.js、Unity、UniApp，具备基础前端开发能力
+                </div>
+                <div class="skill-category">
+                    <strong>数据库与中间件：</strong>熟练掌握MySQL、达梦数据库；熟悉Redis、Kafka、MQTT、ElasticSearch
+                </div>
+                <div class="skill-category">
+                    <strong>工具与其他：</strong>熟练使用Docker、K8s进行容器化部署；熟悉串口、WebSocket、DDS等通信协议；掌握Git、Maven等开发工具
+                </div>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

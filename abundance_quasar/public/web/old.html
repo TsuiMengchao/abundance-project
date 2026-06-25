@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <title>万能工具箱</title>
+    <!-- Vue3 & Vue Router CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js">
+    </script>
+    <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js">
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f5f7fb;
+            color: #1e293b;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        #app {
+            width: 100%;
+            max-width: 1200px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 响应式容器 */
+        @media (max-width: 768px) {
+            #app {
+                padding: 12px;
+            }
+        }
+
+        /* 分类导航卡片 */
+        .category-tabs {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .category-tab {
+            flex: 1 1 auto;
+            min-width: 100px;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+            user-select: none;
+        }
+
+        .category-tab.active {
+            border-color: #3b82f6;
+            background: #eff6ff;
+            color: #1e40af;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2);
+        }
+
+        .category-tab .badge {
+            display: inline-block;
+            background: #e2e8f0;
+            color: #475569;
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 0.75rem;
+            margin-left: 6px;
+            font-weight: 500;
+        }
+
+        /* 工具网格 */
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
+            margin-top: 8px;
+        }
+
+        @media (max-width: 480px) {
+            .tools-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+        }
+
+        .tool-card {
+            background: white;
+            border-radius: 20px;
+            padding: 20px 12px;
+            text-align: center;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+            transition: 0.2s;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.03);
+        }
+
+        .tool-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        .tool-icon {
+            font-size: 2.2rem;
+        }
+
+        .tool-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            line-height: 1.3;
+        }
+
+        .tool-desc {
+            font-size: 0.7rem;
+            color: #64748b;
+        }
+
+        /* 工具页面容器 */
+        .tool-page {
+            background: white;
+            border-radius: 24px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            margin-top: 12px;
+            flex: 1;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #3b82f6;
+            cursor: pointer;
+            margin-bottom: 18px;
+            padding: 6px 12px;
+            border-radius: 30px;
+            transition: 0.2s;
+        }
+
+        .back-btn:hover {
+            background: #eff6ff;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            font-size: 1rem;
+            margin: 8px 0;
+            background: #f8fafc;
+        }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 30px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 0.95rem;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        .result-box {
+            background: #f1f5f9;
+            padding: 14px;
+            border-radius: 14px;
+            margin-top: 12px;
+            word-break: break-all;
+            font-family: monospace;
+        }
+
+        .network-status {
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 12px;
+            color: #64748b;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
+        }
+
+        .status-dot.offline {
+            background: #ef4444;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <router-view></router-view>
+</div>
+
+<script>
+    // ---------- 模拟环境检测 ----------
+    // 在移动端App容器中会注入 window.__APP_ENV__ = 'mobile_app'
+    // 纯Web/H5不注入，显示两大分类
+    const isMobileApp = () => {
+        return window.__APP_ENV__ === 'mobile_app' ||
+            new URLSearchParams(window.location.search).get('platform') === 'mobile_app';
+    };
+
+    // ---------- 工具元数据定义 ----------
+    const tools = [
+        {
+            id: 'ip-lookup',
+            name: 'IP 查询',
+            icon: '🌐',
+            desc: '查询IP地理位置',
+            category: 'local-online',   // 本地页面，需联网API
+            component: 'IpLookup'
+        },
+        {
+            id: 'timestamp',
+            name: '时间戳转换',
+            icon: '🕒',
+            desc: '时间戳与时区转换',
+            category: 'local-offline',
+            component: 'Timestamp'
+        },
+        {
+            id: 'calculator',
+            name: '科学计算器',
+            icon: '🧮',
+            desc: '标准/科学计算',
+            category: 'local-offline',
+            component: 'Calculator'
+        },
+        {
+            id: 'unit-convert',
+            name: '单位换算',
+            icon: '📏',
+            desc: '长度/重量/温度/进制',
+            category: 'local-offline',
+            component: 'UnitConvert'
+        },
+        {
+            id: 'qrcode-gen',
+            name: '二维码生成',
+            icon: '📱',
+            desc: '离线生成二维码',
+            category: 'cloud-offline',  // 云端页面，可缓存离线
+            component: 'QRCodeGen'
+        },
+        {
+            id: 'weather',
+            name: '天气查询',
+            icon: '☁️',
+            desc: '实时天气(需联网)',
+            category: 'cloud-online',
+            component: 'Weather'
+        }
+    ];
+
+    // 分类定义
+    const categoriesMobile = [
+        { key: 'local-offline', label: '本地离线', desc: '内置页面·断网可用' },
+        { key: 'local-online', label: '本地联网', desc: '内置页面·需联网' },
+        { key: 'cloud-offline', label: '云端离线', desc: '云端加载·可缓存离线' },
+        { key: 'cloud-online', label: '云端联网', desc: '云端加载·全程联网' }
+    ];
+
+    const categoriesDesktop = [
+        { key: 'offline', label: '离线工具', desc: '含本地离线+云端离线' },
+        { key: 'online', label: '联网工具', desc: '含本地联网+云端联网' }
+    ];
+
+    // ---------- 工具组件定义 ----------
+    const IpLookup = {
+        template: `
+        <div class="tool-page">
+          <button class="back-btn" @click="$router.push('/')">← 返回工具箱</button>
+          <h2>🌐 IP 查询</h2>
+          <div class="network-status">
+            <span :class="['status-dot', online ? '' : 'offline']"></span>
+            {{ online ? '网络连接正常' : '离线状态，无法查询' }}
+          </div>
+          <input v-model="ip" placeholder="输入IP地址 (留空查询本机)" />
+          <button @click="queryIP" :disabled="!online">查询</button>
+          <div v-if="result" class="result-box">{{ result }}</div>
+          <div v-if="error" class="result-box" style="color:#ef4444;">{{ error }}</div>
+        </div>
+      `,
+        data() {
+            return { ip: '', result: '', error: '', online: navigator.onLine };
+        },
+        mounted() {
+            window.addEventListener('online', () => this.online = true);
+            window.addEventListener('offline', () => this.online = false);
+        },
+        methods: {
+            async queryIP() {
+                this.error = '';
+                this.result = '查询中...';
+                try {
+                    const res = await fetch(`https://ipapi.co/${this.ip || ''}/json/`);
+                    const data = await res.json();
+                    this.result = JSON.stringify(data, null, 2);
+                } catch (e) {
+                    this.error = '请求失败，请检查网络';
+                    this.result = '';
+                }
+            }
+        }
+    };
+
+    const Timestamp = {
+        template: `
+        <div class="tool-page">
+          <button class="back-btn" @click="$router.push('/')">← 返回工具箱</button>
+          <h2>🕒 时间戳转换</h2>
+          <input v-model="timestamp" placeholder="输入Unix时间戳 (秒)" type="number" />
+          <button @click="convert">转换</button>
+          <div v-if="result" class="result-box">
+            <p>本地时间：{{ result.local }}</p>
+            <p>UTC时间：{{ result.utc }}</p>
+            <p>ISO格式：{{ result.iso }}</p>
+          </div>
+          <div style="margin-top:16px;">
+            <button @click="nowTimestamp">获取当前时间戳</button>
+            <span v-if="currentTs" style="margin-left:12px;">当前：{{ currentTs }}</span>
+          </div>
+        </div>
+      `,
+        data() {
+            return { timestamp: '', result: null, currentTs: null };
+        },
+        methods: {
+            convert() {
+                const ts = parseInt(this.timestamp);
+                if (isNaN(ts)) return;
+                const date = new Date(ts * 1000);
+                this.result = {
+                    local: date.toLocaleString(),
+                    utc: date.toUTCString(),
+                    iso: date.toISOString()
+                };
+            },
+            nowTimestamp() {
+                this.currentTs = Math.floor(Date.now() / 1000);
+                this.timestamp = this.currentTs;
+            }
+        }
+    };
+
+    const Calculator = {
+        template: `
+        <div class="tool-page">
+          <button class="back-btn" @click="$router.push('/')">← 返回工具箱</button>
+          <h2>🧮 科学计算器</h2>
+          <input v-model="expression" @keyup.enter="calculate" placeholder="输入表达式，如 sin(pi/2)+2^3" />
+          <button @click="calculate">计算</button>
+          <div v-if="result !== null" class="result-box">{{ result }}</div>
+          <div style="margin-top:12px; font-size:0.8rem; color:#64748b;">
+            支持: + - * / % ^ sin cos tan sqrt log abs PI E
+          </div>
+        </div>
+      `,
+        data() {
+            return { expression: '', result: null };
+        },
+        methods: {
+            calculate() {
+                try {
+                    let expr = this.expression
+                        .replace(/\^/g, '**')
+                        .replace(/sin/g, 'Math.sin')
+                        .replace(/cos/g, 'Math.cos')
+                        .replace(/tan/g, 'Math.tan')
+                        .replace(/sqrt/g, 'Math.sqrt')
+                        .replace(/log/g, 'Math.log10')
+                        .replace(/ln/g, 'Math.log')
+                        .replace(/abs/g, 'Math.abs')
+                        .replace(/PI/g, 'Math.PI')
+                        .replace(/E/g, 'Math.E');
+                    this.result = eval(expr);
+                } catch (e) {
+                    this.result = '表达式错误';
+                }
+            }
+        }
+    };
+
+    const UnitConvert = {
+        template: `
+        <div class="tool-page">
+          <button class="back-btn" @click="$router.push('/')">← 返回工具箱</button>
+          <h2>📏 单位换算</h2>
+          <select v-model="category">
+            <option value="length">长度</option>
+            <option value="weight">重量</option>
+            <option value="temperature">温度</option>
+          </select>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input v-model.number="value" type="number" placeholder="数值" style="flex:1;" />
+            <select v-model="fromUnit" style="width:100px;">
+              <option v-for="u in units" :value="u">{{ u }}</option>
+            </select>
+            <span>→</span>
+            <select v-model="toUnit" style="width:100px;">
+              <option v-for="u in units" :value="u">{{ u }}</option>
+            </select>
+          </div>
+          <button @click="convert">转换</button>
+          <div v-if="result !== null" class="result-box">{{ result }}</div>
+        </div>
+      `,
+        data() {
+            return {
+                category: 'length',
+                value: 0,
+                fromUnit: '米',
+                toUnit: '千米',
+                result: null,
+                units: ['米', '千米', '厘米', '毫米', '英里', '英尺']
+            };
+        },
+        watch: {
+            category(val) {
+                if (val === 'length') this.units = ['米','千米','厘米','毫米','英里','英尺'];
+                else if (val === 'weight') this.units = ['千克','克','毫克','吨','磅','盎司'];
+                else if (val === 'temperature') this.units = ['摄氏度','华氏度','开尔文'];
+                this.fromUnit = this.units[0];
+                this.toUnit = this.units[1];
+            }
+        },
+        methods: {
+            convert() {
+                const v = this.value;
+                if (this.category === 'length') {
+                    const toMeter = { '米':1, '千米':1000, '厘米':0.01, '毫米':0.001, '英里':1609.34, '英尺':0.3048 };
+                    const meter = v * toMeter[this.fromUnit];
+                    this.result = meter / toMeter[this.toUnit] + ' ' + this.toUnit;
+                } else if (this.category === 'weight') {
+                    const toKg = { '千克':1, '克':0.001, '毫克':1e-6, '吨':1000, '磅':0.453592, '盎司':0.0283495 };
+                    const kg = v * toKg[this.fromUnit];
+                    this.result = kg / toKg[this.toUnit] + ' ' + this.toUnit;
+                } else if (this.category === 'temperature') {
+                    let celsius = v;
+                    if (this.fromUnit === '华氏度') celsius = (v - 32) * 5/9;
+                    else if (this.fromUnit === '开尔文') celsius = v - 273.15;
+                    let out;
+                    if (this.toUnit === '摄氏度') out = celsius;
+                    else if (this.toUnit === '华氏度') out = celsius * 9/5 + 32;
+                    else out = celsius + 273.15;
+                    this.result = out.toFixed(2) + ' ' + this.toUnit;
+                }
+            }
+        }
+    };
+
+    // 云端离线工具：二维码生成 (使用QR码库模拟，数据可通过Service Worker缓存)
+    const QRCodeGen = {
+        template: `
+        <div class="tool-page">
+          <button class="back-btn" @click="$router.push('/')">← 返回工具箱</button>
+          <h2>📱 二维码生成 (云端离线)</h2>
+          <div class="network-status">
+            <span :class="['status-dot', cached ? '' : 'offline']"></span>
+            {{ cached ? '页面已缓存，可离线使用' : '正在缓存页面资源...' }}
+          </div>
+          <input v-model="text" placeholder="输入文本或链接" />
+          <button @click="generate">生成二维码</button>
+          <div v-if="qrData" class="result-box" style="text-align:center;">
+            <img :src="qrData" alt="QR" style="max-width:200px;" />
+          </div>
+          <p style="font-size:0.8rem; margin-top:8px;">* 二维码生成完全在本地执行，无需网络。</p>
+        </div>
+      `,
+        data() {
+            return { text: '', qrData: null, cached: false };
+        },
+        mounted() {
+            // 模拟云端页面缓存检查：通过Service Worker缓存状态
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                // 向sw发送消息检查缓存
+                navigator.serviceWorker.controller.postMessage({ type: 'CHECK_CACHE', url: '/cloud-offline/qrcode' });
+                navigator.serviceWorker.addEventListener('message', (e) => {
+                    if (e.data && e.data.type === 'CACHE_STATUS') {
+                        this.cached = e.data.cached;
+                    }
+                });
+            } else {
+                // 无sw时默认认为已缓存（演示）
+                this.cached = true;
+            }
+        },
+        methods: {
+            generate() {
+                // 使用纯前端生成二维码 (简单的QR code生成逻辑，这里用canvas模拟)
+                const canvas = document.createElement('canvas');
+                canvas.width = 200;
+                canvas.height = 200;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0,0,200,200);
+                ctx.fillStyle = 'black';
+                // 极简模拟：根据文本长度画一些方块
+                const seed = this.text.length * 7;
+                for (let i=0; i<20; i++) {
+                    for (let j=0; j<20; j++) {
+                        if ((i*seed + j*3) % 5 === 0) ctx.fillRect(i*10, j*10, 8, 8);
+                    }
+                }
+                this.qrData = canvas.toDataURL();
+            }
+        }
+    };
+
+    // 云端联网工具：天气查询
+    const Weather = {
+        template: `
+        <div class="tool-page">
+          <button class="back-btn" @click="$router.push('/')">← 返回工具箱</button>
+          <h2>☁️ 天气查询 (云端联网)</h2>
+          <input v-model="city" placeholder="输入城市名称 (英文)" />
+          <button @click="fetchWeather">查询天气</button>
+          <div v-if="weather" class="result-box">{{ weather }}</div>
+          <div v-if="error" class="result-box" style="color:#ef4444;">{{ error }}</div>
+        </div>
+      `,
+        data() {
+            return { city: 'Beijing', weather: '', error: '' };
+        },
+        methods: {
+            async fetchWeather() {
+                this.error = '';
+                this.weather = '加载中...';
+                try {
+                    // 使用免费的wttr.in API
+                    const res = await fetch(`https://wttr.in/${this.city}?format=%C+%t+%w`);
+                    const text = await res.text();
+                    this.weather = text;
+                } catch (e) {
+                    this.error = '请求失败，请检查网络';
+                    this.weather = '';
+                }
+            }
+        }
+    };
+
+    // 组件映射
+    const componentMap = {
+        IpLookup, Timestamp, Calculator, UnitConvert, QRCodeGen, Weather
+    };
+
+    // ---------- Vue 应用 ----------
+    const { createApp, defineComponent, ref, computed, onMounted, watch } = Vue;
+    const { createRouter, createWebHashHistory } = VueRouter;
+
+    // 主页组件
+    const HomePage = defineComponent({
+        template: `
+        <div>
+          <h1 style="font-size:1.8rem; margin-bottom:4px;">🧰 万能工具箱</h1>
+          <p style="color:#64748b; margin-bottom:20px;">全端适配 · 离线/联网智能分类</p>
+
+          <!-- 分类切换 -->
+          <div class="category-tabs">
+            <div v-for="cat in currentCategories" :key="cat.key"
+                 :class="['category-tab', activeCat === cat.key ? 'active' : '']"
+                 @click="activeCat = cat.key">
+              {{ cat.label }}
+              <span class="badge">{{ getToolCount(cat.key) }}</span>
+            </div>
+          </div>
+
+          <!-- 工具网格 -->
+          <div class="tools-grid">
+            <div v-for="tool in filteredTools" :key="tool.id"
+                 class="tool-card" @click="$router.push('/tool/' + tool.id)">
+              <span class="tool-icon">{{ tool.icon }}</span>
+              <span class="tool-name">{{ tool.name }}</span>
+              <span class="tool-desc">{{ tool.desc }}</span>
+            </div>
+          </div>
+          <div v-if="filteredTools.length === 0" style="text-align:center; padding:40px; color:#94a3b8;">
+            暂无工具
+          </div>
+        </div>
+      `,
+        setup() {
+            const activeCat = ref(isMobileApp() ? 'local-offline' : 'offline');
+            const currentCategories = computed(() => {
+                return isMobileApp() ? categoriesMobile : categoriesDesktop;
+            });
+
+            const filteredTools = computed(() => {
+                if (isMobileApp()) {
+                    return tools.filter(t => t.category === activeCat.value);
+                } else {
+                    if (activeCat.value === 'offline') {
+                        return tools.filter(t => t.category === 'local-offline' || t.category === 'cloud-offline');
+                    } else {
+                        return tools.filter(t => t.category === 'local-online' || t.category === 'cloud-online');
+                    }
+                }
+            });
+
+            const getToolCount = (catKey) => {
+                if (isMobileApp()) {
+                    return tools.filter(t => t.category === catKey).length;
+                } else {
+                    if (catKey === 'offline') return tools.filter(t => t.category === 'local-offline' || t.category === 'cloud-offline').length;
+                    if (catKey === 'online') return tools.filter(t => t.category === 'local-online' || t.category === 'cloud-online').length;
+                }
+                return 0;
+            };
+
+            // 当平台改变时(演示用)，可动态调整
+            watch(() => isMobileApp(), (val) => {
+                activeCat.value = val ? 'local-offline' : 'offline';
+            });
+
+            return { activeCat, currentCategories, filteredTools, getToolCount };
+        }
+    });
+
+    // 工具页面动态组件
+    const ToolPage = defineComponent({
+        template: `
+        <component :is="currentComponent" v-if="currentComponent" />
+        <div v-else class="tool-page">工具未找到</div>
+      `,
+        props: ['id'],
+        computed: {
+            currentComponent() {
+                const tool = tools.find(t => t.id === this.id);
+                return tool ? componentMap[tool.component] : null;
+            }
+        }
+    });
+
+    // 路由
+    const routes = [
+        { path: '/', component: HomePage },
+        { path: '/tool/:id', component: ToolPage, props: true }
+    ];
+
+    const router = createRouter({
+        history: createWebHashHistory(),
+        routes
+    });
+
+    const app = createApp({});
+    app.use(router);
+    app.mount('#app');
+
+    // ---------- Service Worker 注册 (用于云端离线缓存) ----------
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('SW registered'))
+                .catch(err => console.log('SW registration failed', err));
+        });
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+import{P as e,h as t,k as n,m as r,u as i}from"./vue.runtime.esm-bundler-BgTKX8qy.js";import{t as a}from"./QBtn-CFGj8-Ar.js";import{t as o}from"./QPage-CmCGr8G7.js";var s=t({__name:`second`,setup(t){return(t,s)=>(n(),i(o,{class:`flex flex-center`},{default:e(()=>[r(a,{color:`secondary`,to:`/`,label:`Go to Index Page`,"no-caps":``})]),_:1}))}});export{s as default};
