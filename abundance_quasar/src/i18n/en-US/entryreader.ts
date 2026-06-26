@@ -1,6 +1,6 @@
 export default {
   appTitle: "Entry Reader",
-  recycle: "Recycle Bin",
+  recycleBin: "Recycle Bin",
   backToHome: "Back to Home",
   addRoot: "Add Root",
   treeView: "Tree",

@@ -1,6 +1,6 @@
 export default {
   appTitle: "詞條閱讀器",
-  recycle: "回收桶",
+  recycleBin: "回收桶",
   backToHome: "返回主頁",
   addRoot: "新增根詞條",
   treeView: "樹形",

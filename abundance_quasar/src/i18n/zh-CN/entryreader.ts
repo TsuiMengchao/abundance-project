@@ -1,7 +1,7 @@
 // src/i18n/zh-CN.ts
 export default {
   appTitle: "词条阅读器",
-  recycle: "回收站",
+  recycleBin: "回收站",
   backToHome: "返回主页",
   addRoot: "新增根词条",
   treeView: "树形",
