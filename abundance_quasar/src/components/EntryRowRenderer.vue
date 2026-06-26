@@ -41,61 +41,90 @@
   </template>
 </template>
 
-<script setup>
-import { computed } from 'vue'
+<script setup lang="ts">
+import { computed, type ComputedRef } from 'vue'
 
-// 基础入参
-const props = defineProps({
-  entry: Object,
-  depth: { type: Number, default: 0 },
-  isRecycle: Boolean,
-  forceShow: Boolean,
-  breadcrumbMode: { type: Boolean, default: false },
-  // 父页面传入全局状态
-  expandedIds: Set,
-  viewMode: String,
-  // 工具函数 props
-  hasAnyChildrenFn: Function,
-  getAllChildrenFn: Function,
-  sortScoreFn: Function,
-  isTopDeletedFn: Function,
-})
+// 和父页面统一的词条类型
+interface EntryHistoryItem {
+  version: number
+  content: string
+  timestamp: number
+}
+interface Entry {
+  id: string
+  parentId: string | null
+  content: string
+  version: number
+  history: EntryHistoryItem[]
+  isDeleted: boolean
+  deletedAt: number | null
+  createdAt: number
+  updatedAt: number
+  copyCount: number
+  modifyCount: number
+}
 
-// 事件抛出给父页面统一处理
-const emit = defineEmits([
-  'update',
-  'copy',
-  'add-child',
-  'edit',
-  'history',
-  'delete',
-  'restore',
-  'drill'
-])
+// Props 完整类型约束
+const props = defineProps<{
+  entry: Entry
+  depth?: number
+  isRecycle?: boolean
+  forceShow?: boolean
+  breadcrumbMode?: boolean
+  expandedIds: Set<string>
+  viewMode: 'tree' | 'breadcrumb' | 'flat'
+  // 工具函数类型
+  hasAnyChildrenFn: (id: string) => boolean
+  getAllChildrenFn: (pid: string | null) => Entry[]
+  sortScoreFn: (item: Entry) => number
+  isTopDeletedFn: (item: Entry) => boolean
+}>()
+
+// 事件类型约束
+const emit = defineEmits<{
+  update: []
+  copy: [entryId: string]
+  'add-child': [entryId: string]
+  edit: [entryId: string]
+  history: [entryId: string]
+  delete: [entryId: string]
+  restore: [entryId: string]
+  drill: [entryId: string]
+}>()
+
 // 简写绑定
-const viewMode = props.viewMode || 'tree';
-const expandedIds = props.expandedIds || new Set()
-const hasAnyChildren = computed(() => {
+const viewMode = props.viewMode
+const expandedIds = props.expandedIds
+
+// 计算：当前条目是否存在子项
+const hasAnyChildren: ComputedRef<boolean> = computed(() => {
   return props.hasAnyChildrenFn(props.entry.id)
 })
 const sortScore = props.sortScoreFn
-const isTopDeleted = computed(() => { return props.isTopDeletedFn(props.entry.id)})
-
-// 计算属性
+// 计算：是否为顶层删除条目
+const isTopDeleted: ComputedRef<boolean> = computed(() => {
+  return props.isTopDeletedFn(props.entry)
+})
 const isExpanded = computed(() => expandedIds.has(props.entry.id))
+// 计算：当前展示的子条目列表
 const visibleChildren = computed(() => {
   const all = props.getAllChildrenFn(props.entry.id) || []
   const filtered = props.isRecycle ? all : all.filter(c => !c.isDeleted)
-  return filtered.sort((a, b) => sortScore(b) - sortScore(a))
+  return filtered.sort((a, b) => props.sortScoreFn(b) - props.sortScoreFn(a))
 })
 
-// 交互方法，仅抛事件，逻辑交给父页面
+// 展开/折叠
 const toggleExpand = () => {
   if (!props.hasAnyChildrenFn(props.entry.id) && !props.isRecycle) return
-  if (expandedIds.has(props.entry.id)) expandedIds.delete(props.entry.id)
-  else expandedIds.add(props.entry.id)
+  if (expandedIds.has(props.entry.id)) {
+    expandedIds.delete(props.entry.id)
+  } else {
+    expandedIds.add(props.entry.id)
+  }
   emit('update')
 }
+
+// 点击条目内容
 const onClickContent = () => {
   if (props.breadcrumbMode) {
     emit('drill', props.entry.id)
@@ -103,6 +132,8 @@ const onClickContent = () => {
     toggleExpand()
   }
 }
+
+// 操作事件转发
 const copyText = () => emit('copy', props.entry.id)
 const addChild = () => emit('add-child', props.entry.id)
 const editEntry = () => emit('edit', props.entry.id)

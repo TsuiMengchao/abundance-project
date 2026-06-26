@@ -131,12 +131,45 @@
   </q-page>
 </template>
 
-<script setup>
-import { ref, computed, watch, onMounted } from 'vue'
-
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, type ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as XLSX from 'xlsx'
 import EntryRowRenderer from '@/components/EntryRowRenderer.vue'
+
+// ==================== 类型定义 ====================
+interface EntryHistoryItem {
+  version: number
+  content: string
+  timestamp: number
+}
+
+interface Entry {
+  id: string
+  parentId: string | null
+  content: string
+  version: number
+  history: EntryHistoryItem[]
+  isDeleted: boolean
+  deletedAt: number | null
+  createdAt: number
+  updatedAt: number
+  copyCount: number
+  modifyCount: number
+}
+
+interface EditModalState {
+  visible: boolean
+  mode: 'add' | 'edit'
+  parentId: string | null
+  entryId: string | null
+  content: string
+}
+
+interface BreadcrumbItem {
+  id: string
+  content: string
+}
 
 // ==================== 常量 & 工具函数 抽离封装 ====================
 const STORAGE_KEY = 'entry-reader-data'
@@ -144,12 +177,12 @@ const SETTINGS_KEY = 'entry-reader-settings'
 const SEARCH_SIMILARITY_THRESHOLD = 0.25
 
 // UUID生成
-const uuid = () => 'e_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8)
+const uuid = (): string => 'e_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8)
 
 // 编辑距离算法
-const levenshteinDistance = (a, b) => {
+const levenshteinDistance = (a: string, b: string): number => {
   const m = a.length, n = b.length
-  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
   for (let i = 0; i <= m; i++) dp[i][0] = i
   for (let j = 0; j <= n; j++) dp[0][j] = j
   for (let i = 1; i <= m; i++) {
@@ -165,7 +198,7 @@ const levenshteinDistance = (a, b) => {
 }
 
 // 文本相似度
-const similarity = (a, b) => {
+const similarity = (a: string, b: string): number => {
   const al = a.toLowerCase(), bl = b.toLowerCase()
   if (al.includes(bl) || bl.includes(al)) {
     return 0.7 + Math.min(al.length, bl.length) / Math.max(al.length, bl.length) * 0.3
@@ -177,7 +210,7 @@ const similarity = (a, b) => {
 }
 
 // XML特殊字符转义
-const escapeXml = (str) => str
+const escapeXml = (str: string): string => str
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
   .replace(/>/g, '&gt;')
@@ -187,22 +220,22 @@ const escapeXml = (str) => str
 const { t, locale } = useI18n()
 
 // ==================== 响应式状态 ====================
-const allEntries = ref([])
-const showRecycleBin = ref(false)
-const viewMode = ref('tree')
-const currentTheme = ref('light')
-const currentLang = ref('zh-CN')
-const searchQuery = ref('')
-const showExportMenu = ref(false)
-const historyModalVisible = ref(false)
-const historyEntry = ref(null)
-const breadcrumbStack = ref([])
-const toastMsg = ref('')
-const toastTimer = ref(null)
-const expandedIds = ref(new Set())
-const importFileInput = ref(null)
+const allEntries = ref<Entry[]>([])
+const showRecycleBin = ref<boolean>(false)
+const viewMode = ref<'tree' | 'breadcrumb' | 'flat'>('tree')
+const currentTheme = ref<'light' | 'dark'>('light')
+const currentLang = ref<'zh-CN' | 'zh-TW' | 'en'>('zh-CN')
+const searchQuery = ref<string>('')
+const showExportMenu = ref<boolean>(false)
+const historyModalVisible = ref<boolean>(false)
+const historyEntry = ref<Entry | null>(null)
+const breadcrumbStack = ref<BreadcrumbItem[]>([])
+const toastMsg = ref<string>('')
+const toastTimer = ref<number | null>(null)
+const expandedIds = ref<Set<string>>(new Set())
+const importFileInput = ref<HTMLInputElement | null>(null)
 
-const editModal = ref({
+const editModal = ref<EditModalState>({
   visible: false,
   mode: 'add',
   parentId: null,
@@ -211,14 +244,14 @@ const editModal = ref({
 })
 
 // ==================== 计算属性 ====================
-const entryMap = computed(() => {
-  const map = {}
+const entryMap: ComputedRef<Record<string, Entry>> = computed(() => {
+  const map: Record<string, Entry> = {}
   allEntries.value.forEach(e => map[e.id] = e)
   return map
 })
 
-const childrenMap = computed(() => {
-  const map = {}
+const childrenMap: ComputedRef<Record<string, Entry[]>> = computed(() => {
+  const map: Record<string, Entry[]> = {}
   allEntries.value.forEach(e => {
     const pid = e.parentId || '__root__'
     if (!map[pid]) map[pid] = []
@@ -239,7 +272,7 @@ const deletedRootEntries = computed(() => allEntries.value.filter(e => e.isDelet
 }))
 
 // 展示列表主逻辑
-const displayEntries = computed(() => {
+const displayEntries = computed((): Entry[] => {
   const entries = allEntries.value
   const cm = childrenMap.value
   const em = entryMap.value
@@ -269,11 +302,11 @@ const displayEntries = computed(() => {
 
   // 面包屑层级模式
   if (viewMode.value === 'breadcrumb') {
-    let parentId = null
+    let parentId: string | null = null
     if (breadcrumbStack.value.length > 0) {
       parentId = breadcrumbStack.value[breadcrumbStack.value.length - 1].id
     }
-    let list
+    let list: Entry[]
     if (showRecycleBin.value) {
       list = parentId ? entries.filter(e => e.parentId === parentId) : deletedRootEntries.value
     } else {
@@ -293,28 +326,28 @@ const filteredCount = computed(() => displayEntries.value.length)
 
 // ==================== 公共方法 ====================
 // 词条排序权重
-const sortScore = (e) => {
+const sortScore = (e: Entry): number => {
   const now = Date.now()
   const age = (now - (e.updatedAt || e.createdAt || now)) / 3600000
   return (1 / (1 + age * 0.1)) * 10 + (e.copyCount || 0) * 0.5 + (e.modifyCount || 0) * 0.3
 }
 
 // 获取未删除子节点
-const getChildren = (pid) => (childrenMap.value[pid || '__root__'] || []).filter(e => !e.isDeleted)
+const getChildren = (pid: string | null): Entry[] => (childrenMap.value[pid || '__root__'] || []).filter(e => !e.isDeleted)
 // 获取全部子节点（含删除）
-const getAllChildren = (pid) => childrenMap.value[pid || '__root__'] || []
+const getAllChildren = (pid: string | null): Entry[] => childrenMap.value[pid || '__root__'] || []
 // 判断是否顶级删除条目
-const isTopDeleted = (entry) => {
+const isTopDeleted = (entry: Entry): boolean => {
   if (!entry.isDeleted) return false
   if (!entry.parentId) return true
   const p = entryMap.value[entry.parentId]
   return !p || !p.isDeleted
 }
 // 是否存在子节点
-const hasAnyChildren = (id) => (childrenMap.value[id] || []).length > 0
+const hasAnyChildren = (id: string): boolean => (childrenMap.value[id] || []).length > 0
 
 // 时间格式化
-const formatTime = (ts) => {
+const formatTime = (ts: number): string => {
   if (!ts) return ''
   return new Date(ts).toLocaleString(currentLang.value === 'en' ? 'en-US' : 'zh-CN', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -322,36 +355,36 @@ const formatTime = (ts) => {
 }
 
 // Toast提示
-const showToast = (msg) => {
+const showToast = (msg: string): void => {
   toastMsg.value = msg
   if (toastTimer.value) clearTimeout(toastTimer.value)
-  toastTimer.value = setTimeout(() => toastMsg.value = '', 2500)
+  toastTimer.value = window.setTimeout(() => toastMsg.value = '', 2500)
 }
 
 // 刷新响应式列表
-const refreshData = () => {
+const refreshData = (): void => {
   allEntries.value = [...allEntries.value]
 }
 
 // 本地存储读写
-const saveData = () => {
+const saveData = (): void => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allEntries.value))
   } catch (err) {
-    showToast('数据保存失败：' + err.message)
+    showToast('数据保存失败：' + (err as Error).message)
   }
 }
-const loadData = () => {
+const loadData = (): void => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) allEntries.value = JSON.parse(raw)
+    if (raw) allEntries.value = JSON.parse(raw) as Entry[]
   } catch (err) {
     allEntries.value = []
     showToast('数据加载异常，已重置')
   }
   if (!Array.isArray(allEntries.value)) allEntries.value = []
 }
-const saveSettings = () => {
+const saveSettings = (): void => {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
       theme: currentTheme.value,
@@ -360,11 +393,11 @@ const saveSettings = () => {
     }))
   } catch (e) {}
 }
-const loadSettings = () => {
+const loadSettings = (): void => {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (raw) {
-      const s = JSON.parse(raw)
+      const s = JSON.parse(raw) as { theme?: 'light' | 'dark'; lang?: 'zh-CN' | 'zh-TW' | 'en'; viewMode?: 'tree' | 'breadcrumb' | 'flat' }
       if (s.theme) currentTheme.value = s.theme
       if (s.lang) {
         currentLang.value = s.lang
@@ -377,18 +410,18 @@ const loadSettings = () => {
 }
 
 // 主题切换
-const setTheme = () => {
+const setTheme = (): void => {
   document.documentElement.setAttribute('data-theme', currentTheme.value)
   saveSettings()
 }
 // 语言切换
-const setLang = () => {
+const setLang = (): void => {
   locale.value = currentLang.value
   saveSettings()
 }
 
 // 复制文本
-const copyEntryText = (entryId) => {
+const copyEntryText = (entryId: string): void => {
   const entry = entryMap.value[entryId]
   if (!entry) return
   navigator.clipboard.writeText(entry.content)
@@ -411,7 +444,7 @@ const copyEntryText = (entryId) => {
 }
 
 // 弹窗操作
-const openAddModal = (parentId) => {
+const openAddModal = (parentId: string | null): void => {
   editModal.value = {
     visible: true,
     mode: 'add',
@@ -420,7 +453,7 @@ const openAddModal = (parentId) => {
     content: ''
   }
 }
-const openEditModal = (entryId) => {
+const openEditModal = (entryId: string): void => {
   const e = entryMap.value[entryId]
   if (!e) return
   editModal.value = {
@@ -431,12 +464,12 @@ const openEditModal = (entryId) => {
     content: e.content
   }
 }
-const cancelEditModal = () => {
+const cancelEditModal = (): void => {
   editModal.value.visible = false
 }
 
 // 提交新增/编辑
-const submitEditModal = () => {
+const submitEditModal = (): void => {
   const { mode, parentId, entryId, content } = editModal.value
   const trimContent = content.trim()
   if (!trimContent) {
@@ -447,7 +480,7 @@ const submitEditModal = () => {
   if (mode === 'add') {
     const lines = content.split('\n\n').filter(l => l.trim())
     if (lines.length === 0) return
-    const newEntries = lines.map(line => ({
+    const newEntries: Entry[] = lines.map(line => ({
       id: uuid(),
       parentId: parentId || null,
       content: line.trim(),
@@ -464,7 +497,7 @@ const submitEditModal = () => {
     saveData()
     showToast(`${t('saved')} (${newEntries.length})`)
   } else {
-    const entry = entryMap.value[entryId]
+    const entry = entryMap.value[entryId!]
     if (!entry) return
     if (trimContent === entry.content) {
       showToast(t('contentUnchanged'))
@@ -485,7 +518,7 @@ const submitEditModal = () => {
 }
 
 // 删除/恢复词条
-const deleteEntry = (id) => {
+const deleteEntry = (id: string): void => {
   const e = entryMap.value[id]
   if (!e) return
   if (!confirm(`${t('confirmDelete')}\n\n${e.content.substring(0, 60)}`)) return
@@ -496,7 +529,7 @@ const deleteEntry = (id) => {
   showToast('🗑️ ' + t('deleted'))
   refreshData()
 }
-const restoreEntry = (id) => {
+const restoreEntry = (id: string): void => {
   const e = entryMap.value[id]
   if (!e || !e.isDeleted) return
   e.isDeleted = false
@@ -508,11 +541,11 @@ const restoreEntry = (id) => {
 }
 
 // 历史版本
-const showHistory = (id) => {
+const showHistory = (id: string): void => {
   historyEntry.value = entryMap.value[id]
   historyModalVisible.value = true
 }
-const restoreVersion = (entryId, version) => {
+const restoreVersion = (entryId: string, version: number): void => {
   const e = entryMap.value[entryId]
   if (!e) return
   const hist = e.history?.find(h => h.version === version)
@@ -530,13 +563,13 @@ const restoreVersion = (entryId, version) => {
 }
 
 // 面包屑导航
-const drillDownList = (entryId) => {
+const drillDownList = (entryId: string): void => {
   const entry = entryMap.value[entryId]
   if (!entry) return
   breadcrumbStack.value.push({ id: entry.id, content: entry.content })
   refreshData()
 }
-const navBreadcrumb = (idx) => {
+const navBreadcrumb = (idx: number): void => {
   if (idx < 0) {
     breadcrumbStack.value = []
     refreshData()
@@ -547,13 +580,13 @@ const navBreadcrumb = (idx) => {
 }
 
 // 视图切换
-const onViewModeChange = () => {
+const onViewModeChange = (): void => {
   breadcrumbStack.value = []
   expandedIds.value.clear()
   refreshData()
 }
 // 回收站切换
-const toggleRecycleBin = () => {
+const toggleRecycleBin = (): void => {
   showRecycleBin.value = !showRecycleBin.value
   breadcrumbStack.value = []
   expandedIds.value.clear()
@@ -561,13 +594,13 @@ const toggleRecycleBin = () => {
   refreshData()
 }
 // 搜索输入
-const onSearch = () => {
+const onSearch = (): void => {
   expandedIds.value.clear()
   if (searchQuery.value && viewMode.value === 'tree' && !showRecycleBin.value) {
     const active = allEntries.value.filter(e => !e.isDeleted)
     active.forEach(e => {
       if (similarity(e.content, searchQuery.value) > SEARCH_SIMILARITY_THRESHOLD) {
-        let cur = e.parentId ? entryMap.value[e.parentId] : null
+        let cur: Entry | null = e.parentId ? entryMap.value[e.parentId] : null
         while (cur) {
           expandedIds.value.add(cur.id)
           cur = cur.parentId ? entryMap.value[cur.parentId] : null
@@ -578,19 +611,22 @@ const onSearch = () => {
   refreshData()
 }
 // ==================== 导入逻辑 ====================
-const triggerImport = () => {
-  importFileInput.value = ''
-  importFileInput.value.click()
+const triggerImport = (): void => {
+  if (importFileInput.value) {
+    importFileInput.value.value = ''
+    importFileInput.value.click()
+  }
 }
-const handleImportFile = (e) => {
-  const file = e.target.files[0]
+const handleImportFile = (e: Event): void => {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
   if (!file) return
-  const ext = file.name.split('.').pop().toLowerCase()
+  const ext = file.name.split('.').pop()?.toLowerCase()
   const reader = new FileReader()
   reader.onload = (ev) => {
-    const text = ev.target.result
+    const text = ev.target?.result as string
     try {
-      let entries = []
+      let entries: Entry[] = []
       if (ext === 'json') entries = parseJSON(text)
       else if (ext === 'xml') entries = parseXML(text)
       else if (ext === 'txt') entries = parseTXT(text)
@@ -610,14 +646,14 @@ const handleImportFile = (e) => {
       }
       mergeImportedEntries(entries)
     } catch (err) {
-      showToast('导入失败：' + err.message)
+      showToast('导入失败：' + (err as Error).message)
     }
   }
   reader.readAsText(file)
 }
 
 // Excel导入（增加XLSX存在判断）
-const handleExcelImport = async (file) => {
+const handleExcelImport = async (file: File): Promise<void> => {
   if (!XLSX) {
     showToast('未引入SheetJS(XLSX)库，无法导入Excel')
     return
@@ -625,22 +661,22 @@ const handleExcelImport = async (file) => {
   const reader = new FileReader()
   reader.onload = (ev) => {
     try {
-      const data = new Uint8Array(ev.target.result)
+      const data = new Uint8Array(ev.target?.result as ArrayBuffer)
       const wb = XLSX.read(data, { type: 'array' })
       const sheet1 = wb.Sheets[wb.SheetNames[0]]
       if (!sheet1) {
         showToast('Excel缺少工作表')
         return
       }
-      const rows1 = XLSX.utils.sheet_to_json(sheet1, { header: 1 })
+      const rows1 = XLSX.utils.sheet_to_json(sheet1, { header: 1 }) as any[][]
       if (rows1.length < 2) {
         showToast('表格无数据')
         return
       }
-      let historyMap = {}
+      const historyMap: Record<string, EntryHistoryItem[]> = {}
       if (wb.SheetNames.length > 1) {
         const sheet2 = wb.Sheets[wb.SheetNames[1]]
-        const rows2 = XLSX.utils.sheet_to_json(sheet2, { header: 1 })
+        const rows2 = XLSX.utils.sheet_to_json(sheet2, { header: 1 }) as any[][]
         if (rows2.length > 1) {
           const headers2 = rows2[0].map(h => String(h).toLowerCase().trim())
           const eidIdx = headers2.indexOf('entryid')
@@ -675,8 +711,8 @@ const handleExcelImport = async (file) => {
         showToast('表格缺少content列')
         return
       }
-      const oldIdMap = {}
-      const newEntries = []
+      const oldIdMap: Record<string, string> = {}
+      const newEntries: Entry[] = []
       const now = Date.now()
       for (let i = 1; i < rows1.length; i++) {
         const row = rows1[i]
@@ -684,7 +720,7 @@ const handleExcelImport = async (file) => {
         const oldId = (idCol >= 0 && row[idCol]) ? String(row[idCol]) : uuid()
         const newId = uuid()
         oldIdMap[oldId] = newId
-        const entry = {
+        const entry: Entry = {
           id: newId,
           parentId: (pidCol >= 0 && row[pidCol]) ? String(row[pidCol]) : null,
           content: String(row[contentCol]).trim(),
@@ -703,7 +739,7 @@ const handleExcelImport = async (file) => {
         if (entry.parentId && oldIdMap[entry.parentId]) {
           entry.parentId = oldIdMap[entry.parentId]
         }
-        let oldIdForEntry = null
+        let oldIdForEntry: string | null = null
         for (const [old, nid] of Object.entries(oldIdMap)) {
           if (nid === entry.id) { oldIdForEntry = old; break }
         }
@@ -723,15 +759,15 @@ const handleExcelImport = async (file) => {
       refreshData()
     } catch (err) {
       console.error(err)
-      showToast('Excel导入错误：' + err.message)
+      showToast('Excel导入错误：' + (err as Error).message)
     }
   }
   reader.readAsArrayBuffer(file)
 }
 
 // 导入合并ID映射
-const mergeImportedEntries = (newEntries) => {
-  const idMap = {}
+const mergeImportedEntries = (newEntries: Entry[]): void => {
+  const idMap: Record<string, string> = {}
   newEntries.forEach(e => {
     const old = e.id
     const nid = uuid()
@@ -748,14 +784,14 @@ const mergeImportedEntries = (newEntries) => {
 }
 
 // 各类文件解析器
-const parseJSON = (text) => {
+const parseJSON = (text: string): Entry[] => {
   const data = JSON.parse(text)
-  const flat = []
+  const flat: Entry[] = []
   const now = Date.now()
-  const flatten = (nodes, pid) => {
+  const flatten = (nodes: any[], pid: string | null): void => {
     if (!Array.isArray(nodes)) return
     nodes.forEach(n => {
-      const entry = {
+      const entry: Entry = {
         id: n.id || uuid(),
         parentId: pid || null,
         content: n.content || n.text || '',
@@ -765,7 +801,8 @@ const parseJSON = (text) => {
         copyCount: n.copyCount || 0,
         modifyCount: n.modifyCount || 0,
         createdAt: n.createdAt || now,
-        updatedAt: n.updatedAt || now
+        updatedAt: n.updatedAt || now,
+        deletedAt: null
       }
       flat.push(entry)
       if (n.children) flatten(n.children, entry.id)
@@ -777,27 +814,29 @@ const parseJSON = (text) => {
   else flatten([data], null)
   return flat
 }
-const parseXML = (text) => {
+const parseXML = (text: string): Entry[] => {
   const p = new DOMParser()
   const doc = p.parseFromString(text, 'text/xml')
-  const flat = []
+  const flat: Entry[] = []
   const now = Date.now()
-  const parseNode = (node, pid) => {
+  const parseNode = (node: Element, pid: string | null): void => {
     for (const child of node.children) {
       if (child.tagName === 'entry' || child.tagName === 'item') {
         const c = child.getAttribute('content') || child.textContent?.trim() || ''
-        flat.push({
+        const entry: Entry = {
           id: child.getAttribute('id') || uuid(),
           parentId: pid || null,
           content: c,
-          version: parseInt(child.getAttribute('version')) || 1,
+          version: parseInt(child.getAttribute('version') || '1'),
           history: [{ version: 1, content: c, timestamp: now }],
           isDeleted: child.getAttribute('isDeleted') === 'true',
-          copyCount: parseInt(child.getAttribute('copyCount')) || 0,
-          modifyCount: parseInt(child.getAttribute('modifyCount')) || 0,
+          copyCount: parseInt(child.getAttribute('copyCount') || '0'),
+          modifyCount: parseInt(child.getAttribute('modifyCount') || '0'),
           createdAt: now,
-          updatedAt: now
-        })
+          updatedAt: now,
+          deletedAt: null
+        }
+        flat.push(entry)
         parseNode(child, flat[flat.length - 1].id)
       }
     }
@@ -805,7 +844,7 @@ const parseXML = (text) => {
   parseNode(doc.documentElement, null)
   return flat
 }
-const parseTXT = (text) => {
+const parseTXT = (text: string): Entry[] => {
   const lines = text.split('\n').filter(l => l.trim())
   const now = Date.now()
   return lines.map(l => ({
@@ -814,11 +853,11 @@ const parseTXT = (text) => {
     isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, copyCount: 0, modifyCount: 0
   }))
 }
-const parseYML = (text) => {
-  const flat = []
+const parseYML = (text: string): Entry[] => {
+  const flat: Entry[] = []
   const now = Date.now()
   const lines = text.split('\n')
-  const stack = [{ indent: -1, id: null }]
+  const stack: { indent: number; id: string | null }[] = [{ indent: -1, id: null }]
   for (const line of lines) {
     if (!line.trim() || line.trim().startsWith('#')) continue
     const indent = line.search(/\S/)
@@ -826,7 +865,7 @@ const parseYML = (text) => {
     if (!content) continue
     while (stack.length > 0 && stack[stack.length - 1].indent >= indent) stack.pop()
     const pid = stack.length > 0 ? stack[stack.length - 1].id : null
-    const entry = {
+    const entry: Entry = {
       id: uuid(), parentId: pid, content, version: 1,
       history: [{ version: 1, content, timestamp: now }],
       isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, copyCount: 0, modifyCount: 0
@@ -836,11 +875,11 @@ const parseYML = (text) => {
   }
   return flat
 }
-const parseProperties = (text) => {
-  const flat = []
+const parseProperties = (text: string): Entry[] => {
+  const flat: Entry[] = []
   const now = Date.now()
   const lines = text.split('\n')
-  const pathMap = {}
+  const pathMap: Record<string, string> = {}
   for (let line of lines) {
     line = line.trim()
     if (!line || line.startsWith('#') || line.startsWith('!')) continue
@@ -850,12 +889,12 @@ const parseProperties = (text) => {
     const val = line.substring(eq + 1).trim()
     if (!key || !val) continue
     const parts = key.split('.')
-    let pid = null
+    let pid: string | null = null
     for (let i = 0; i < parts.length - 1; i++) {
       const pk = parts.slice(0, i + 1).join('.')
       if (pathMap[pk]) pid = pathMap[pk]
     }
-    const entry = {
+    const entry: Entry = {
       id: uuid(), parentId: pid, content: val, version: 1,
       history: [{ version: 1, content: val, timestamp: now }],
       isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, copyCount: 0, modifyCount: 0
@@ -865,7 +904,7 @@ const parseProperties = (text) => {
   }
   return flat
 }
-const parseCSV = (text) => {
+const parseCSV = (text: string): Entry[] => {
   const lines = text.split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
@@ -873,7 +912,7 @@ const parseCSV = (text) => {
   const pidCol = headers.findIndex(h => h === 'parentid' || h === 'parent_id' || h === 'parent')
   const contentCol = headers.findIndex(h => h === 'content' || h === 'text' || h === 'entry')
   if (contentCol < 0) return []
-  const entries = []
+  const entries: Entry[] = []
   const now = Date.now()
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(',').map(c => c.trim())
@@ -891,12 +930,12 @@ const parseCSV = (text) => {
 }
 
 // ==================== 导出逻辑 ====================
-const doExport = (format) => {
+const doExport = (format: 'json' | 'xml' | 'txt' | 'yml' | 'properties' | 'excel'): void => {
   showExportMenu.value = false
   const all = allEntries.value
   const nowStr = new Date().toISOString().slice(0, 10)
   try {
-    let blob, fn
+    let blob: Blob, fn: string
     switch (format) {
       case 'json':
         blob = new Blob([JSON.stringify(buildTreeForExport(all), null, 2)], { type: 'application/json' })
@@ -938,30 +977,31 @@ const doExport = (format) => {
     URL.revokeObjectURL(url)
     showToast(`${t('exported')}: ${fn}`)
   } catch (err) {
-    showToast('导出失败：' + err.message)
+    showToast('导出失败：' + (err as Error).message)
   }
 }
-const buildTreeForExport = (entries) => {
-  const map = {}
+type ExportTreeItem = Omit<Entry, 'children'> & { children?: ExportTreeItem[] }
+const buildTreeForExport = (entries: Entry[]): { entries: ExportTreeItem[] } => {
+  const map: Record<string, ExportTreeItem> = {}
   entries.forEach(e => map[e.id] = { ...e, children: [] })
-  const roots = []
+  const roots: ExportTreeItem[] = []
   entries.forEach(e => {
-    if (e.parentId && map[e.parentId]) map[e.parentId].children.push(map[e.id])
+    if (e.parentId && map[e.parentId]) map[e.parentId].children!.push(map[e.id])
     else roots.push(map[e.id])
   })
-  const clean = (n) => {
+  const clean = (n: ExportTreeItem): ExportTreeItem => {
     const { id, parentId, content, version, history, copyCount, modifyCount, createdAt, updatedAt, children } = n
-    if (children.length === 0) return { id, parentId, content, version, history, copyCount, modifyCount, createdAt, updatedAt }
+    if (!children || children.length === 0) return { id, parentId, content, version, history, copyCount, modifyCount, createdAt, updatedAt }
     return { id, parentId, content, version, history, copyCount, modifyCount, createdAt, updatedAt, children: children.map(clean) }
   }
   return { entries: roots.map(clean) }
 }
-const buildXML = (entries) => {
-  const map = {}
+const buildXML = (entries: Entry[]): string => {
+  const map: Record<string, Entry> = {}
   entries.forEach(e => map[e.id] = e)
   const roots = entries.filter(e => !e.parentId || !map[e.parentId])
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<entries>\n'
-  const render = (e, ind) => {
+  const render = (e: Entry, ind: number): void => {
     const s = '  '.repeat(ind)
     const esc = escapeXml(e.content)
     xml += `${s}<entry id="${e.id}" parentId="${e.parentId || ''}" content="${esc}" version="${e.version}" copyCount="${e.copyCount || 0}" modifyCount="${e.modifyCount || 0}" isDeleted="${e.isDeleted}">\n`
@@ -973,12 +1013,12 @@ const buildXML = (entries) => {
   xml += '</entries>'
   return xml
 }
-const buildYML = (entries) => {
-  const map = {}
+const buildYML = (entries: Entry[]): string => {
+  const map: Record<string, Entry> = {}
   entries.forEach(e => { map[e.id] = e; });
   const roots = entries.filter(e => !e.parentId || !map[e.parentId]);
   let y = '';
-  const render = (e, ind) => {
+  const render = (e: Entry, ind: number): void => {
     const p = '  '.repeat(ind) + '- ';
     y += p + e.content.replace(/\n/g, '\\n') + '\n';
     const children = entries.filter(c => c.parentId === e.id);
@@ -987,13 +1027,13 @@ const buildYML = (entries) => {
   roots.forEach(r => render(r, 0));
   return y;
 };
-const buildProperties = (entries) => {
-  const map = {};
+const buildProperties = (entries: Entry[]): string => {
+  const map: Record<string, Entry> = {};
   entries.forEach(e => { map[e.id] = e; });
   let p = '';
-  const path = (e) => {
-    const parts = [];
-    let cur = e;
+  const path = (e: Entry): string => {
+    const parts: string[] = [];
+    let cur: Entry | null = e;
     while (cur) {
       parts.unshift(cur.content.replace(/[.=]/g, '_').replace(/\s+/g, '_'));
       cur = cur.parentId ? map[cur.parentId] : null;
@@ -1005,9 +1045,9 @@ const buildProperties = (entries) => {
   });
   return p;
 };
-const buildExcel = (entries) => {
+const buildExcel = (entries: Entry[]): Uint8Array => {
   // 主表数据
-  const mainRows = [['id', 'parentId', 'content', 'version', 'copyCount', 'modifyCount', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']];
+  const mainRows: (string | number | null)[][] = [['id', 'parentId', 'content', 'version', 'copyCount', 'modifyCount', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']];
   entries.forEach(e => {
     mainRows.push([
       e.id,
@@ -1024,7 +1064,7 @@ const buildExcel = (entries) => {
   });
 
   // 历史表数据
-  const historyRows = [['entryId', 'version', 'content', 'timestamp']];
+  const historyRows: (string | number)[][] = [['entryId', 'version', 'content', 'timestamp']];
   entries.forEach(e => {
     if (e.history && Array.isArray(e.history)) {
       e.history.forEach(h => {
