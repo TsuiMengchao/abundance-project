@@ -127,12 +127,11 @@
           <h3>📜 {{ t('historyFor') }}: {{ historyEntry?.content?.substring(0,40) || '' }}</h3>
           <div class="history-list">
             <div class="history-item" v-for="h in historyEntry?.historyRecords||[]" :key="h.version"
-                 :style="{background: h.version===historyEntry?.version ? 'var(--tag-bg)' : 'transparent'}">
-              <span class="h-version">v{{ h.version }}</span>
+                 :style="{background: 'transparent'}">
+              <span class="h-version">v{{ getEntryHistoryVersion(historyEntry, h.id) }}</span>
               <span class="h-content">{{ h.content }}</span>
               <span style="font-size:0.7rem;color:var(--text2);">{{ formatTime(h.timestamp) }}</span>
-              <span v-if="h.version===historyEntry?.version" class="tag current">● {{ t('current') }}</span>
-              <button v-else class="btn btn-small" @click="restoreVersion(historyEntry.id, h.version)">{{ t('restore') }}</button>
+              <button class="btn btn-small" @click="restoreVersion(historyEntry.id, h.id)">{{ t('restore') }}</button>
             </div>
           </div>
           <div class="modal-actions"><button class="btn" @click="historyModalVisible=false">{{ t('close') }}</button></div>
@@ -166,7 +165,7 @@ import EntryRowRenderer from '@/components/EntryRowRenderer.vue'
 
 // ==================== 类型定义 ====================
 interface EntryHistoryItem {
-  version: number
+  id: string
   content: string
   timestamp: number
   userId: string
@@ -175,11 +174,10 @@ interface EntryHistoryItem {
 /** 词条复制记录 */
 interface EntryCopyItem {
   id: string
-  version: number
+  entryId: string
   content: string
   timestamp: number
   userId: string
-  entryId: string
 }
 
 /** 词条主体 */
@@ -187,7 +185,6 @@ interface Entry {
   id: string
   parentId: string | null
   content: string
-  version: number
   historyRecords: EntryHistoryItem[] | []
   copyRecords: EntryCopyItem[] | []
   isDeleted: boolean
@@ -223,6 +220,24 @@ const SEARCH_SIMILARITY_THRESHOLD = 0.25
 
 // UUID生成
 const uuid = (): string => 'e_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8)
+
+// 实时计算词条当前版本号：历史条数 + 1
+const getEntryVersion = (entry: Entry): number => {
+  const historyLen = Array.isArray(entry.historyRecords) ? entry.historyRecords.length : 0
+  return historyLen + 1
+}
+
+
+// 根据历史记录ID，获取该历史快照对应的旧版本号
+const getEntryHistoryVersion = (entry: Entry, historyItemId: string): number => {
+  const rawList = Array.isArray(entry.historyRecords) ? entry.historyRecords : []
+  // 按时间正序（旧→新）排序
+  const sortedHistory = [...rawList].sort((a, b) => a.timestamp - b.timestamp)
+  const targetIndex = sortedHistory.findIndex(item => item.id === historyItemId)
+  if (targetIndex === -1) return 0
+  // 排序后下标+1即为该快照当时的版本号
+  return targetIndex + 1
+}
 
 // 编辑距离算法
 const levenshteinDistance = (a: string, b: string): number => {
@@ -496,7 +511,7 @@ const closeUserIdModal = () => {
   userIdModal.value.visible = false
 }
 
-// 复制文本（生成复制记录，不再累加数字）
+// 复制文本
 const copyEntry = (entryId: string): void => {
   const entry = entryMap.value[entryId]
   if (!entry || !currentUserId.value) {
@@ -508,7 +523,6 @@ const copyEntry = (entryId: string): void => {
     id: uuid(),
     entryId: entry.id,
     content: entry.content,
-    version: entry.version,
     timestamp: now,
     userId: currentUserId.value
   }
@@ -583,8 +597,7 @@ const submitEditModal = (): void => {
       id: uuid(),
       parentId: parentId || null,
       content: line.trim(),
-      version: 1,
-      history: [],
+      historyRecords: [],
       copyRecords: [],
       isDeleted: false,
       deletedAt: null,
@@ -603,20 +616,19 @@ const submitEditModal = (): void => {
       editModal.value.visible = false
       return
     }
-    // 编辑前的内容存入history（仅存历史，当前不进历史）
+    // 编辑前的内容存入history
     if (!entry.historyRecords) entry.historyRecords = []
     entry.historyRecords.push({
-      version: entry.version,
+      id: uuid(),
       content: entry.content,
       timestamp: now,
       userId: currentUserId.value
     })
-    // 版本+1
-    entry.version += 1
     entry.content = trimContent
     entry.updatedAt = now
+    const newVer = getEntryVersion(entry)
     saveData()
-    showToast(`${t('saved')} v${entry.version}`)
+    showToast(`${t('saved')} v${newVer}`)
   }
   editModal.value.visible = false
   refreshData()
@@ -650,26 +662,26 @@ const showHistory = (id: string): void => {
   historyEntry.value = entryMap.value[id]
   historyModalVisible.value = true
 }
-const restoreVersion = (entryId: string, version: number): void => {
+const restoreVersion = (entryId: string, historyItemId: number): void => {
   const e = entryMap.value[entryId]
   if (!e) return
-  const hist = e.historyRecords?.find(h => h.version === version)
+  const hist = e.historyRecords?.find(h => h.id === historyItemId)
   if (!hist) return
   const now = Date.now()
   // 当前内容存入历史
-  if (!entry.historyRecords) entry.historyRecords = []
+  if (!e.historyRecords) e.historyRecords = []
   e.historyRecords.push({
-    version: e.version,
+    id: uuid(),
     content: e.content,
     timestamp: now,
     userId: currentUserId.value
   })
-  // 回滚到旧内容，版本+1
+  // 回滚到旧内容
   e.content = hist.content
-  e.version += 1
   e.updatedAt = now
+  const newVer = getEntryVersion(e)
   saveData()
-  showToast(`${t('versionRestored')} → v${e.version}`)
+  showToast(`${t('versionRestored')} → v${newVer}`)
   historyModalVisible.value = false
   refreshData()
 }
@@ -794,21 +806,21 @@ const handleExcelImport = async (file: File): Promise<void> => {
         if (rows2.length > 1) {
           const headers2 = rows2[0].map(h => String(h).toLowerCase().trim())
           const eidIdx = headers2.indexOf('entryid')
-          const verIdx = headers2.indexOf('version')
           const contIdx = headers2.indexOf('content')
           const timeIdx = headers2.indexOf('timestamp')
           const uidIdx = headers2.indexOf('userid')
+          const idIdx = headers3.indexOf('id')
           for (let i = 1; i < rows2.length; i++) {
             const row = rows2[i]
             if (!row) continue
             const eid = row[eidIdx]?.toString() || ''
-            const ver = parseInt(row[verIdx]) || 1
             const cont = row[contIdx]?.toString() || ''
             const ts = new Date(row[timeIdx]).getTime() || Date.now()
             const uid = row[uidIdx]?.toString() || ''
+            const recId = row[idIdx]?.toString() || uuid()
             if (!eid) continue
             if (!historyMap[eid]) historyMap[eid] = []
-            historyMap[eid].push({ version: ver, content: cont, timestamp: ts, userId: uid })
+            historyMap[eid].push({ id: recId, entryId: eid, content: cont, timestamp: ts, userId: uid })
           }
         }
       }
@@ -819,7 +831,6 @@ const handleExcelImport = async (file: File): Promise<void> => {
         if (rows3.length > 1) {
           const headers3 = rows3[0].map(h => String(h).toLowerCase().trim())
           const eidIdx = headers3.indexOf('entryid')
-          const verIdx = headers3.indexOf('version')
           const contIdx = headers3.indexOf('content')
           const timeIdx = headers3.indexOf('timestamp')
           const uidIdx = headers3.indexOf('userid')
@@ -828,14 +839,13 @@ const handleExcelImport = async (file: File): Promise<void> => {
             const row = rows3[i]
             if (!row) continue
             const eid = row[eidIdx]?.toString() || ''
-            const ver = parseInt(row[verIdx]) || 1
             const cont = row[contIdx]?.toString() || ''
             const ts = new Date(row[timeIdx]).getTime() || Date.now()
             const uid = row[uidIdx]?.toString() || ''
             const recId = row[idIdx]?.toString() || uuid()
             if (!eid) continue
             if (!copyMap[eid]) copyMap[eid] = []
-            copyMap[eid].push({ id: recId, entryId: eid, version: ver, content: cont, timestamp: ts, userId: uid })
+            copyMap[eid].push({ id: recId, entryId: eid, content: cont, timestamp: ts, userId: uid })
           }
         }
       }
@@ -843,7 +853,6 @@ const handleExcelImport = async (file: File): Promise<void> => {
       const idCol = headers1.indexOf('id')
       const pidCol = headers1.indexOf('parentid')
       const contentCol = headers1.indexOf('content')
-      const versionCol = headers1.indexOf('version')
       const createdAtCol = headers1.indexOf('createdat')
       const updatedAtCol = headers1.indexOf('updatedat')
       const isDeletedCol = headers1.indexOf('isdeleted')
@@ -866,9 +875,8 @@ const handleExcelImport = async (file: File): Promise<void> => {
           id: newId,
           parentId: (pidCol >= 0 && row[pidCol]) ? String(row[pidCol]) : null,
           content: String(row[contentCol]).trim(),
-          version: (versionCol >= 0 && row[versionCol]) ? parseInt(row[versionCol]) || 1 : 1,
           copyRecords: [],
-          history: [],
+          historyRecords: [],
           userId: (uidCol >= 0 && row[uidCol]) ? String(row[uidCol]) : currentUserId.value,
           createdAt: (createdAtCol >= 0) ? (new Date(row[createdAtCol]).getTime() || now) : now,
           updatedAt: (updatedAtCol >= 0) ? (new Date(row[updatedAtCol]).getTime() || now) : now,
@@ -886,11 +894,7 @@ const handleExcelImport = async (file: File): Promise<void> => {
           if (nid === entry.id) { oldIdForEntry = old; break }
         }
         if (oldIdForEntry && historyMap[oldIdForEntry]) {
-          entry.historyRecords = historyMap[oldIdForEntry].sort((a, b) => a.version - b.version)
-          if (entry.historyRecords.length > 0) {
-            const maxVer = Math.max(...entry.historyRecords.map(h => h.version))
-            entry.version = maxVer + 1
-          }
+          entry.historyRecords = historyMap[oldIdForEntry].sort((a, b) => a.timestamp - b.timestamp)
         }
         if (oldIdForEntry && copyMap[oldIdForEntry]) {
           entry.copyRecords = copyMap[oldIdForEntry]
@@ -940,7 +944,6 @@ const parseJSON = (text: string): Entry[] => {
         id: n.id || uuid(),
         parentId: pid || null,
         content: n.content || n.text || '',
-        version: n.version || 1,
         history: Array.isArray(n.historyRecords) ? n.historyRecords : [],
         copyRecords: Array.isArray(n.copyRecords) ? n.copyRecords : [],
         isDeleted: n.isDeleted || false,
@@ -972,8 +975,7 @@ const parseXML = (text: string): Entry[] => {
           id: child.getAttribute('id') || uuid(),
           parentId: pid || null,
           content: c,
-          version: parseInt(child.getAttribute('version') || '1'),
-          history: [],
+          historyRecords: [],
           copyRecords: [],
           isDeleted: child.getAttribute('isDeleted') === 'true',
           deletedAt: null,
@@ -993,8 +995,8 @@ const parseTXT = (text: string): Entry[] => {
   const lines = text.split('\n').filter(l => l.trim())
   const now = Date.now()
   return lines.map(l => ({
-    id: uuid(), parentId: null, content: l.trim(), version: 1,
-    history: [], copyRecords: [],
+    id: uuid(), parentId: null, content: l.trim(),
+    historyRecords: [], copyRecords: [],
     isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
   }))
 }
@@ -1011,8 +1013,8 @@ const parseYML = (text: string): Entry[] => {
     while (stack.length > 0 && stack[stack.length - 1].indent >= indent) stack.pop()
     const pid = stack.length > 0 ? stack[stack.length - 1].id : null
     const entry: Entry = {
-      id: uuid(), parentId: pid, content, version: 1,
-      history: [], copyRecords: [],
+      id: uuid(), parentId: pid, content,
+      historyRecords: [], copyRecords: [],
       isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
     }
     flat.push(entry)
@@ -1040,8 +1042,8 @@ const parseProperties = (text: string): Entry[] => {
       if (pathMap[pk]) pid = pathMap[pk]
     }
     const entry: Entry = {
-      id: uuid(), parentId: pid, content: val, version: 1,
-      history: [], copyRecords: [],
+      id: uuid(), parentId: pid, content: val,
+      historyRecords: [], copyRecords: [],
       isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
     }
     flat.push(entry)
@@ -1066,8 +1068,7 @@ const parseCSV = (text: string): Entry[] => {
       id: (idCol >= 0 && cols[idCol]) ? cols[idCol] : uuid(),
       parentId: (pidCol >= 0 && cols[pidCol]) ? cols[pidCol] : null,
       content: cols[contentCol],
-      version: 1,
-      history: [],
+      historyRecords: [],
       copyRecords: [],
       isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
     })
@@ -1136,9 +1137,9 @@ const buildTreeForExport = (entries: Entry[]): { entries: ExportTreeItem[] } => 
     else roots.push(map[e.id])
   })
   const clean = (n: ExportTreeItem): ExportTreeItem => {
-    const { id, parentId, content, version, history, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted, children } = n
-    if (!children || children.length === 0) return { id, parentId, content, version, history, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted }
-    return { id, parentId, content, version, history, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted, children: children.map(clean) }
+    const { id, parentId, content, historyRecords, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted, children } = n
+    if (!children || children.length === 0) return { id, parentId, content, historyRecords, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted }
+    return { id, parentId, content, historyRecords, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted, children: children.map(clean) }
   }
   return { entries: roots.map(clean) }
 }
@@ -1150,7 +1151,7 @@ const buildXML = (entries: Entry[]): string => {
   const render = (e: Entry, ind: number): void => {
     const s = '  '.repeat(ind)
     const esc = escapeXml(e.content)
-    xml += `${s}<entry id="${e.id}" parentId="${e.parentId || ''}" content="${esc}" version="${e.version}" userId="${e.userId}" isDeleted="${e.isDeleted}">\n`
+    xml += `${s}<entry id="${e.id}" parentId="${e.parentId || ''}" content="${esc}" userId="${e.userId}" isDeleted="${e.isDeleted}">\n`
     const children = entries.filter(c => c.parentId === e.id)
     children.forEach(c => render(c, ind + 1))
     xml += `${s}</entry>\n`
@@ -1193,13 +1194,12 @@ const buildProperties = (entries: Entry[]): string => {
 };
 const buildExcel = (entries: Entry[]): Uint8Array => {
   // 主词条表
-  const mainRows: (string | number | null)[][] = [['id', 'parentId', 'content', 'version', 'userId', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']];
+  const mainRows: (string | number | null)[][] = [['id', 'parentId', 'content', 'userId', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']];
   entries.forEach(e => {
     mainRows.push([
       e.id,
       e.parentId || '',
       e.content,
-      e.version,
       e.userId,
       new Date(e.createdAt).toISOString(),
       new Date(e.updatedAt).toISOString(),
@@ -1208,17 +1208,17 @@ const buildExcel = (entries: Entry[]): Uint8Array => {
     ]);
   });
   // 历史记录表
-  const historyRows: (string | number)[][] = [['entryId', 'version', 'content', 'timestamp', 'userId']];
+  const historyRows: (string | number)[][] = [['id', 'entryId', 'content', 'timestamp', 'userId']];
   entries.forEach(e => {
     e.historyRecords.forEach(h => {
-      historyRows.push([e.id, h.version, h.content, new Date(h.timestamp).toISOString(), h.userId])
+      historyRows.push([h.id, e.id, h.content, new Date(h.timestamp).toISOString(), h.userId])
     })
   })
   // 复制记录表
-  const copyRows: (string | number)[][] = [['id', 'entryId', 'version', 'content', 'timestamp', 'userId']];
+  const copyRows: (string | number)[][] = [['id', 'entryId', 'content', 'timestamp', 'userId']];
   entries.forEach(e => {
     e.copyRecords.forEach(c => {
-      copyRows.push([c.id, e.id, c.version, c.content, new Date(c.timestamp).toISOString(), c.userId])
+      copyRows.push([c.id, e.id, c.content, new Date(c.timestamp).toISOString(), c.userId])
     })
   })
 

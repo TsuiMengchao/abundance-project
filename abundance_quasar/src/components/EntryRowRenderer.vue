@@ -8,7 +8,7 @@
               {{ entry.isDeleted ? '🗑️ ' : '' }}{{ entry.content }}
             </span>
       <span class="meta-tags">
-            <span class="tag">v{{ entry.version }}</span>
+            <span class="tag">v{{ (entry.historyRecords||[]).length + 1 }}</span>
             <span class="tag">✏️{{ (entry.historyRecords||[]).length }}</span>
             <span class="tag" v-if="(entry.copyRecords||[]).length>0">📋{{ (entry.copyRecords||[]).length }}</span>
       </span>
