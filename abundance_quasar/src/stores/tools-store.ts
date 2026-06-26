@@ -52,7 +52,10 @@ export const useToolStore = defineStore('tool', {
         const res = await fetch('/config/tools.json')
         if (!res.ok) throw new Error('本地配置加载失败')
         const data: LocalConfigResp = await res.json()
-        this.tools = data.tools
+        this.tools = (data.tools || []).map((item: ToolItem) => ({
+          ...item,
+          src: item.routePath==='/tools/NativeIFrame' ? window.location.origin+item.src : undefined,
+        }))
         this.categories = data.categories
         this.loadedLocal = true
       } catch (err) {
@@ -72,7 +75,7 @@ export const useToolStore = defineStore('tool', {
         this.cloudTools = (json.tools || []).map((item: ToolItem) => ({
           ...item,
           id: 'cloud-'+item.id,
-          src: item.routePath==='/tools/NativeIFrame' ? this.serverConfig.url+item.src : vitem.routePath,
+          src: item.routePath==='/tools/NativeIFrame' ? this.serverConfig.url+item.src : this.serverConfig.url+item.routePath,
           routePath: '/tools/NativeIFrame?id=cloud-' + item.id,
         }))
         this.loadedCloud = true
@@ -129,5 +132,5 @@ export const isMobileApp = () => {
   if (window.__NATIVE__ || window.electron || window.uni || window.wx || window.plus) {
     return true;
   }
-  return true;
+  return false;
 };

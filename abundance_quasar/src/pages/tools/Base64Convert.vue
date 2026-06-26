@@ -1,53 +1,31 @@
 <template>
   <q-page class="flex flex-center">
-    <q-card class="col-12 q-pa-lg">
-      <q-btn label="← 返回工具箱" icon="arrow_back" class="mb-4" @click="$router.push('/')" />
-      <h2 class="text-center mb-5">🔐 Base64 编码转换</h2>
+    <div class="tool-page">
+      <button class="back-btn" @click="$router.push('/')">← 返回工具箱</button>
+      <h2>🔐 Base64 编码转换</h2>
 
-      <q-input
+      <input
         v-model="content"
         placeholder="请输入要转换的文本或 Base64 字符串"
-        class="mb-4"
-        label="转换内容"
-        filled
-        type="textarea"
-        rows="4"
+        style="min-height:80px;white-space:pre-wrap;word-break:break-all"
       />
 
-      <div class="flex gap-3 mb-4">
-        <q-btn
-          label="编码 → Base64"
-          icon="encode"
-          color="primary"
-          class="flex-1"
-          @click="encode"
-        />
-        <q-btn
-          label="Base64 → 解码"
-          icon="decode"
-          color="secondary"
-          class="flex-1"
-          @click="decode"
-        />
+      <div style="display:flex;gap:10px;margin:10px 0">
+        <button @click="encode" style="flex:1">编码 → Base64</button>
+        <button @click="decode" style="flex:1">Base64 → 解码</button>
       </div>
 
-      <q-btn
-        v-if="result"
-        label="复制结果"
-        icon="content_copy"
-        color="green"
-        class="w-full mb-4"
-        @click="copyResult"
-      />
+      <button @click="copyResult" v-if="result" style="background:#10b981;width:100%">
+        复制结果
+      </button>
 
-      <q-card v-if="result" class="q-pa-4 bg-grey-100 mb-4">
+      <div v-if="result" class="result-box" style="margin-top:12px;">
         {{ result }}
-      </q-card>
-
-      <q-card v-if="error" class="q-pa-4 bg-red-100 text-red-600">
+      </div>
+      <div v-if="error" class="result-box" style="color:#ef4444;margin-top:12px;">
         {{ error }}
-      </q-card>
-    </q-card>
+      </div>
+    </div>
   </q-page>
 </template>
 
@@ -105,3 +83,71 @@ const copyResult = () => {
     });
 };
 </script>
+
+<style scoped>
+/* 工具页面容器 */
+.tool-page {
+  background: white;
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  margin-top: 12px;
+  flex: 1;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #3b82f6;
+  cursor: pointer;
+  margin-bottom: 18px;
+  padding: 6px 12px;
+  border-radius: 30px;
+  transition: 0.2s;
+}
+
+.back-btn:hover {
+  background: #eff6ff;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  font-size: 1rem;
+  margin: 8px 0;
+  background: #f8fafc;
+}
+
+button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 30px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  font-size: 0.95rem;
+}
+
+button:hover {
+  background: #2563eb;
+}
+
+.result-box {
+  background: #f1f5f9;
+  padding: 14px;
+  border-radius: 14px;
+  margin-top: 12px;
+  word-break: break-all;
+  font-family: monospace;
+}
+</style>

@@ -1,56 +1,26 @@
 <template>
   <q-page class="row q-pa-md">
-    <q-card class="col-12 q-pa-lg">
-      <q-btn label="← 返回工具箱" icon="arrow_back" class="mb-4" @click="$router.push('/')" />
-      <h2 class="text-center mb-5">📏 单位换算</h2>
-
-      <q-select
-        v-model="category"
-        label="换算类别"
-        :options="categoryOptions"
-        class="mb-4"
-        filled
-      />
-
-      <div class="flex gap-2 items-center mb-4">
-        <q-input
-          v-model.number="value"
-          type="number"
-          placeholder="数值"
-          class="flex-1"
-          label="数值"
-          filled
-        />
-
-        <q-select
-          v-model="fromUnit"
-          :options="units.map(u => ({ label: u, value: u }))"
-          style="width:100px"
-          filled
-        />
-
-        <span class="text-lg">→</span>
-
-        <q-select
-          v-model="toUnit"
-          :options="units.map(u => ({ label: u, value: u }))"
-          style="width:100px"
-          filled
-        />
+    <div class="tool-page">
+      <button class="back-btn" @click="$router.push('/')">← 返回工具箱</button>
+      <h2>📏 单位换算</h2>
+      <select v-model="category">
+        <option value="length">长度</option>
+        <option value="weight">重量</option>
+        <option value="temperature">温度</option>
+      </select>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input v-model.number="value" type="number" placeholder="数值" style="flex:1;" />
+        <select v-model="fromUnit" style="width:100px;">
+          <option v-for="u in units" :value="u">{{ u }}</option>
+        </select>
+        <span>→</span>
+        <select v-model="toUnit" style="width:100px;">
+          <option v-for="u in units" :value="u">{{ u }}</option>
+        </select>
       </div>
-
-      <q-btn
-        label="转换"
-        icon="swap_horiz"
-        color="primary"
-        class="mb-4"
-        @click="convert"
-      />
-
-      <q-card v-if="result !== null" class="q-pa-4 bg-grey-100">
-        {{ result }}
-      </q-card>
-    </q-card>
+      <button @click="convert">转换</button>
+      <div v-if="result !== null" class="result-box">{{ result }}</div>
+    </div>
   </q-page>
 </template>
 
@@ -65,13 +35,6 @@ const fromUnit = ref<string>('米');
 const toUnit = ref<string>('千米');
 const result = ref<string | null>(null);
 const units = ref<string[]>(['米', '千米', '厘米', '毫米', '英里', '英尺']);
-
-// 换算类别选项
-const categoryOptions = [
-  { label: '长度', value: 'length' },
-  { label: '重量', value: 'weight' },
-  { label: '温度', value: 'temperature' }
-];
 
 // 监听类别变化更新单位列表
 watch(category, (val) => {
@@ -116,3 +79,71 @@ const convert = () => {
   }
 };
 </script>
+
+<style scoped>
+/* 工具页面容器 */
+.tool-page {
+  background: white;
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  margin-top: 12px;
+  flex: 1;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #3b82f6;
+  cursor: pointer;
+  margin-bottom: 18px;
+  padding: 6px 12px;
+  border-radius: 30px;
+  transition: 0.2s;
+}
+
+.back-btn:hover {
+  background: #eff6ff;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  font-size: 1rem;
+  margin: 8px 0;
+  background: #f8fafc;
+}
+
+button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 30px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  font-size: 0.95rem;
+}
+
+button:hover {
+  background: #2563eb;
+}
+
+.result-box {
+  background: #f1f5f9;
+  padding: 14px;
+  border-radius: 14px;
+  margin-top: 12px;
+  word-break: break-all;
+  font-family: monospace;
+}
+</style>

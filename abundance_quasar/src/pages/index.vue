@@ -1,11 +1,7 @@
 <template>
   <q-layout view="lHh Lpr lFf">
-    <div class="q-mb-lg flex justify-between items-center">
-      <div>
-        <h1 class="text-h4 q-mb-xs">🧰 万能工具箱</h1>
-        <p class="text-grey-6">全端适配 · 离线/联网智能分类</p>
-      </div>
-      <!-- 云端配置按钮 -->
+    <div>
+      <h1 style="font-size:1.8rem; margin-bottom:4px;">🧰 万能工具箱</h1>
       <q-btn
         label="云端配置"
         color="primary"
@@ -14,68 +10,44 @@
         @click="openConfigDialog"
         class="q-mr-sm"
       />
-    </div>
+      <p style="color:#64748b; margin-bottom:20px;">全端适配 · 离线/联网智能分类</p>
+      <!-- 云端配置按钮 -->
 
-    <q-tabs v-model="activeTab" class="q-mb-lg">
-      <q-tab
-        v-for="tab in currentTabs"
-        :key="tab.key"
-        :name="tab.key"
-        label-class="text-weight-medium"
-      >
-        <template #default>
-          {{ tab.label }}
-          <q-badge color="blue-5" class="q-ml-xs">{{ getToolCount(tab.key) }}</q-badge>
-        </template>
-      </q-tab>
-    </q-tabs>
-
-    <div class="row q-col-gutter-md">
-      <div class="col-12" v-for="cate in subCategoryList" :key="cate.id">
-        <q-card bordered>
-          <q-card-section
-            class="row items-center justify-between cursor-pointer"
-            @click="foldMap[cate.id] = !foldMap[cate.id]"
-          >
-            <span class="text-subtitle1">
-              {{ cate.name }} ({{ getCateToolNum(cate.id) }})
-            </span>
-            <q-icon
-              name="expand_more"
-              :style="{ transform: foldMap[cate.id] ? 'rotate(-90deg)' : 'rotate(0deg)' }"
-              class="transition-all duration-300"
-            />
-          </q-card-section>
-
-          <q-slide-transition>
-            <q-card-section v-if="!foldMap[cate.id]" class="q-pt-none">
-              <div class="row q-col-gutter-md">
-                <div
-                  class="col-6 col-sm-4 col-md-3 col-lg-2"
-                  v-for="tool in getToolsByCate(cate.id)"
-                  :key="tool.id"
-                >
-                  <q-card
-                    bordered
-                    class="cursor-pointer hover-shadow-lg transition-all"
-                    @click="handleToolClick(tool)"
-                  >
-                    <q-card-section class="text-center">
-                      <div class="text-h4 q-mb-xs">{{ tool.icon }}</div>
-                      <div class="text-weight-medium text-sm q-mb-xs">{{ tool.name }}</div>
-                      <div class="text-caption text-grey-6">{{ tool.desc }}</div>
-                    </q-card-section>
-                  </q-card>
-                </div>
-              </div>
-            </q-card-section>
-          </q-slide-transition>
-        </q-card>
+      <!-- 一级标签区域 -->
+      <div class="category-tabs">
+        <div v-for="cat in currentTabs" :key="cat.key"
+             :class="['category-tab', activeTab === cat.key ? 'active' : '']"
+             @click="activeTab = cat.key; resetAllFold()">
+          {{ cat.label }}
+          <span class="badge">{{ getToolCount(cat.key) }}</span>
+        </div>
       </div>
-    </div>
 
-    <div v-if="filteredTools.length === 0" class="text-center q-pa-xl text-grey-5">
-      暂无工具
+      <!-- 独立上下排列分类卡片 -->
+      <div class="sub-card-wrap" v-if="subCategoryList.length">
+        <div class="sub-card" v-for="cate in subCategoryList" :key="cate.id">
+          <!-- 卡片头部 -->
+          <div class="sub-card-head" @click="toggleFold(cate.id)">
+            <span class="sub-card-name">{{ cate.name }} ({{ getCateToolNum(cate.id) }})</span>
+            <span class="fold-icon" :style="{transform: foldMap[cate.id] ? 'rotate(-90deg)' : 'rotate(0deg)'}">▼</span>
+          </div>
+          <!-- 卡片内容区域，带动效展开收起 -->
+          <div class="sub-card-body" :class="{open: !foldMap[cate.id]}">
+            <div class="tools-grid">
+              <div v-for="tool in getToolsByCate(cate.id)" :key="tool.id"
+                   class="tool-card" @click="handleToolClick(tool)">
+                <span class="tool-icon">{{ tool.icon }}</span>
+                <span class="tool-name">{{ tool.name }}</span>
+                <span class="tool-desc">{{ tool.desc }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="filteredTools.length === 0" style="text-align:center; padding:40px; color:#94a3b8;">
+        暂无工具
+      </div>
     </div>
 
     <!-- 云端配置弹窗 -->
@@ -232,7 +204,14 @@ const getToolCount = (tabKey: string) => {
   }
   return 0;
 };
-
+const toggleFold = (cateId: string) => {
+  foldMap.value[cateId] = !foldMap.value[cateId];
+};
+const resetAllFold = () => {
+  Object.keys(foldMap.value).forEach(k => {
+    foldMap.value[k] = false;
+  });
+};
 const getToolsByCate = (cateId: string) => filteredTools.value.filter(item => item.category === cateId);
 const getCateToolNum = (cateId: string) => getToolsByCate(cateId).length;
 
@@ -248,3 +227,320 @@ const handleToolClick = (tool: ToolItem) => {
   }
 }
 </script>
+
+<style scoped>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  background: #f5f7fb;
+  color: #1e293b;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+/* 响应式容器 */
+@media (max-width: 768px) {
+  #app {
+    padding: 12px;
+  }
+}
+
+/* 分类导航卡片 */
+.category-tabs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.category-tab {
+  flex: 1 1 auto;
+  min-width: 100px;
+  padding: 12px 16px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+  user-select: none;
+}
+
+.category-tab.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1e40af;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2);
+}
+
+.category-tab .badge {
+  display: inline-block;
+  background: #e2e8f0;
+  color: #475569;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  margin-left: 6px;
+  font-weight: 500;
+}
+
+/* 工具网格 */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+@media (max-width: 480px) {
+  .tools-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+}
+
+.tool-card {
+  background: white;
+  border-radius: 20px;
+  padding: 20px 12px;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+  transition: 0.2s;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+.tool-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+}
+
+.tool-icon {
+  font-size: 2.2rem;
+}
+
+.tool-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.3;
+}
+
+.tool-desc {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  font-size: 1rem;
+  margin: 8px 0;
+  background: #f8fafc;
+}
+
+button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 30px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  font-size: 0.95rem;
+}
+
+button:hover {
+  background: #2563eb;
+}
+
+/* 二级分类外层容器，上下间距隔开卡片 */
+.sub-card-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+/* 完整独立卡片，白底阴影，不和背景融合 */
+.sub-card {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+/* 卡片头部区域 */
+.sub-card-head {
+  padding: 14px 20px;
+  background: #f8fafc;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+.sub-card-head:hover {
+  background: #f1f5f9;
+}
+.sub-card-name {
+  font-weight: 500;
+  font-size: 15px;
+}
+.fold-icon {
+  font-size: 15px;
+  width:24px;
+  text-align:center;
+  transition: transform 0.25s ease;
+}
+/* 卡片内容容器，高度过渡实现折叠动效 */
+.sub-card-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.15s ease, padding 0.15s ease;
+}
+.sub-card-body.open {
+  max-height: 2000px;
+  padding: 16px 20px;
+}
+/* 原有工具网格布局完全不变 */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+.tool-card {
+  padding: 14px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tool-icon {
+  font-size: 24px;
+}
+.tool-name {
+  font-weight: 500;
+}
+.tool-desc {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.category-tabs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.category-tab {
+  padding:12px 20px;
+  background: #ffffff;
+  border:1px solid #e2e8f0;
+  border-radius:12px;
+  cursor: pointer;
+  transition:0.2s;
+}
+.category-tab.active {
+  border-color:#3b82f6;
+  background:#eff6ff;
+}
+.badge {
+  font-size:12px;
+  background:#e5e7eb;
+  padding:2px 6px;
+  border-radius:8px;
+  margin-left:6px;
+}
+/* 外层卡片容器垂直排列 */
+.sub-card-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* 独立大块分类卡片 白底阴影 区分背景 */
+.sub-card {
+  background:#fff;
+  border-radius:16px;
+  box-shadow:0 1px 6px rgba(0,0,0,0.06);
+  overflow:hidden;
+}
+/* 卡片头部区域 */
+.sub-card-head {
+  padding:16px 20px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  cursor:pointer;
+  font-size:16px;
+  font-weight:500;
+}
+.fold-icon {
+  font-size:16px;
+  transition:transform 0.25s ease;
+  color:#555;
+}
+/* 折叠动画容器 */
+.sub-card-body {
+  max-height:0;
+  overflow:hidden;
+  transition:max-height 0.3s ease, padding 0.3s ease;
+  padding:0 20px;
+}
+.sub-card-body.open {
+  max-height:3000px;
+  padding:0 20px 20px 20px;
+}
+/* 工具网格布局 */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap:16px;
+}
+.tool-card {
+  background:#f7f8fc;
+  border-radius:14px;
+  padding:20px 12px;
+  text-align:center;
+  cursor:pointer;
+  transition:0.2s;
+}
+.tool-card:hover {
+  background:#eff6ff;
+}
+.tool-icon {
+  font-size:34px;
+  display:block;
+  margin-bottom:8px;
+}
+.tool-name {
+  font-weight:500;
+  font-size:15px;
+  display:block;
+  margin-bottom:4px;
+}
+.tool-desc {
+  font-size:12px;
+  color:#64748b;
+}
+</style>

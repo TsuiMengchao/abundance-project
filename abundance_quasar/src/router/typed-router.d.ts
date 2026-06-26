@@ -60,6 +60,13 @@ declare module 'vue-router/auto-routes' {
       { path: ParamValue<false> },
       | never
     >,
+    '/index2': RouteRecordInfo<
+      '/index2',
+      '/index2',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/tools': RouteRecordInfo<
       '/tools',
       '/tools',
@@ -67,6 +74,7 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | '/tools/Base64Convert'
       | '/tools/Calculator'
+      | '/tools/EntryReader'
       | '/tools/IpLookup'
       | '/tools/NativeIFrame'
       | '/tools/QRCodeGen'
@@ -85,6 +93,13 @@ declare module 'vue-router/auto-routes' {
     '/tools/Calculator': RouteRecordInfo<
       '/tools/Calculator',
       '/tools/Calculator',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/tools/EntryReader': RouteRecordInfo<
+      '/tools/EntryReader',
+      '/tools/EntryReader',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -185,11 +200,20 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | 'path'
     }
+    'src/pages/index2.vue': {
+      routes:
+        | '/index2'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/tools.vue': {
       routes:
         | '/tools'
         | '/tools/Base64Convert'
         | '/tools/Calculator'
+        | '/tools/EntryReader'
         | '/tools/IpLookup'
         | '/tools/NativeIFrame'
         | '/tools/QRCodeGen'
@@ -213,6 +237,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/tools/Calculator.vue': {
       routes:
         | '/tools/Calculator'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/tools/EntryReader.vue': {
+      routes:
+        | '/tools/EntryReader'
       views:
         | never
       pathParamNames:

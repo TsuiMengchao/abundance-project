@@ -1,53 +1,26 @@
 <template>
-  <q-page class="row q-pa-md" :style="containerStyle">
-    <q-card class="col-12 q-pa-lg">
-      <!-- 顶部操作栏 -->
-      <div class="flex justify-between items-center mb-4">
-        <q-btn
-          v-if="!isFullScreen"
-          label="← 返回工具箱"
-          icon="arrow_back"
-          @click="$router.push('/')"
-        />
-        <q-btn
-          label="全屏"
-          icon="fullscreen"
-          @click="toggleFullScreen"
-        />
+  <q-page class="row q-pa-md">
+    <div class="tool-page" :style="containerStyle">
+      <!-- 顶部栏：返回 + 全屏按钮 -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+        <button class="back-btn" @click="$router.push('/')" v-if="!isFullScreen">← 返回工具箱</button>
       </div>
 
-      <h2 v-if="!isFullScreen" class="text-center mb-5">📱 二维码生成 (云端离线)</h2>
-
-      <!-- 缓存状态 -->
-      <q-badge v-if="!isFullScreen" :color="cached ? 'green' : 'orange'" class="mb-4">
-        <q-icon :name="cached ? 'check_circle' : 'sync'" class="mr-2" />
+      <h2 v-if="!isFullScreen">📱 二维码生成 (云端离线)</h2>
+      <div class="network-status" v-if="!isFullScreen">
+        <span :class="['status-dot', cached ? '' : 'offline']"></span>
         {{ cached ? '页面已缓存，可离线使用' : '正在缓存页面资源...' }}
-      </q-badge>
+      </div>
 
-      <q-input
-        v-model="text"
-        placeholder="输入文本或链接"
-        class="mb-4"
-        label="二维码内容"
-        filled
-      />
+      <input v-model="text" placeholder="输入文本或链接" />
+      <button @click="generate" style="margin-top:8px;">生成二维码</button>
 
-      <q-btn
-        label="生成二维码"
-        icon="qr_code"
-        color="primary"
-        class="mb-4"
-        @click="generate"
-      />
+      <div v-if="qrData" class="result-box" style="text-align:center; margin-top:16px;">
+        <img :src="qrData" alt="真实二维码" style="max-width:280px; width:100%;" />
+      </div>
 
-      <q-card v-if="qrData" class="q-pa-4 text-center">
-        <img :src="qrData" alt="二维码" style="max-width:280px; width:100%;" />
-      </q-card>
-
-      <p v-if="!isFullScreen" class="text-caption mt-2 text-grey-600">
-        * 二维码生成完全在本地执行，无需网络。
-      </p>
-    </q-card>
+      <p style="font-size:0.8rem; margin-top:8px;" v-if="!isFullScreen">* 二维码生成完全在本地执行，无需网络。</p>
+    </div>
   </q-page>
 </template>
 
@@ -123,3 +96,91 @@ const toggleFullScreen = () => {
   isFullScreen.value = !isFullScreen.value;
 };
 </script>
+
+<style scoped>
+/* 工具页面容器 */
+.tool-page {
+  background: white;
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  margin-top: 12px;
+  flex: 1;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #3b82f6;
+  cursor: pointer;
+  margin-bottom: 18px;
+  padding: 6px 12px;
+  border-radius: 30px;
+  transition: 0.2s;
+}
+
+.back-btn:hover {
+  background: #eff6ff;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  font-size: 1rem;
+  margin: 8px 0;
+  background: #f8fafc;
+}
+
+button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 30px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  font-size: 0.95rem;
+}
+
+button:hover {
+  background: #2563eb;
+}
+
+.result-box {
+  background: #f1f5f9;
+  padding: 14px;
+  border-radius: 14px;
+  margin-top: 12px;
+  word-break: break-all;
+  font-family: monospace;
+}
+
+.network-status {
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  color: #64748b;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.status-dot.offline {
+  background: #ef4444;
+}
+</style>

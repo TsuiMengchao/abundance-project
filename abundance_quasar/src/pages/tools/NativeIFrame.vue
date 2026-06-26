@@ -97,8 +97,6 @@ const toggleFullScreen = () => {
 // 新标签打开iframe页面
 const openInNewTab = () => {
   if (!tool.value) return;
-  const originUrl = window.location.origin;
-  const targetUrl = `${originUrl}${tool.value.src}`;
-  window.open(targetUrl);
+  window.open(tool.value.src);
 };
 </script>
