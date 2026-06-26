@@ -6,7 +6,7 @@
         <button class="btn" @click="toggleRecycleBin" :class="{accent: showRecycleBin}">
           🗑️ {{ showRecycleBin ? t('backToHome') : t('recycleBin') }} ({{ deletedCount }})
         </button>
-        <button class="btn accent" @click="openAddModal(null)" v-if="!showRecycleBin">＋ {{ t('addRoot') }}</button>
+        <button class="btn accent" @click="addChild(null)" v-if="!showRecycleBin">＋ {{ t('addRoot') }}</button>
         <select class="btn" v-model="viewMode" @change="onViewModeChange">
           <option value="tree">🌳 {{ t('treeView') }}</option>
           <option value="breadcrumb">🧭 {{ t('breadcrumbView') }}</option>
@@ -21,6 +21,7 @@
           <option value="zh-TW">繁</option>
           <option value="en">EN</option>
         </select>
+        <button class="btn" @click="openUserIdModal">👤 {{ currentUserId || 'Set UserID' }}</button>
         <button class="btn" @click="triggerImport">📥 {{ t('import') }}</button>
         <button class="btn" @click="showExportMenu = !showExportMenu">📤 {{ t('export') }}</button>
         <div v-if="showExportMenu" class="modal-overlay" @click.self="showExportMenu=false" style="position:fixed;inset:0;z-index:250;">
@@ -69,6 +70,12 @@
                                 :get-all-children-fn="getAllChildren"
                                 :sort-score-fn="sortScore"
                                 :is-top-deleted-fn="isTopDeleted"
+                                @copy="copyEntry"
+                                @add-child="addChild"
+                                @edit="editEntry"
+                                @history="showHistory"
+                                @delete="deleteEntry"
+                                @restore="restoreEntry"
                                 @update="refreshData">
             </entry-row-renderer>
           </template>
@@ -83,6 +90,12 @@
                                 :get-all-children-fn="getAllChildren"
                                 :sort-score-fn="sortScore"
                                 :is-top-deleted-fn="isTopDeleted"
+                                @copy="copyEntry"
+                                @add-child="addChild"
+                                @edit="editEntry"
+                                @history="showHistory"
+                                @delete="deleteEntry"
+                                @restore="restoreEntry"
                                 @update="refreshData">
 
             </entry-row-renderer>
@@ -91,7 +104,7 @@
         <div class="empty-state" v-else>
           <span class="icon">{{ showRecycleBin ? '🗑️' : '📭' }}</span>
           <span>{{ showRecycleBin ? t('emptyRecycle') : t('emptyHint') }}</span>
-          <button class="btn accent" v-if="!showRecycleBin" @click="openAddModal(null)">＋ {{ t('addFirst') }}</button>
+          <button class="btn accent" v-if="!showRecycleBin" @click="addChild(null)">＋ {{ t('addFirst') }}</button>
         </div>
       </div>
 
@@ -113,7 +126,7 @@
         <div class="modal" style="max-width:600px;">
           <h3>📜 {{ t('historyFor') }}: {{ historyEntry?.content?.substring(0,40) || '' }}</h3>
           <div class="history-list">
-            <div class="history-item" v-for="h in historyEntry?.history||[]" :key="h.version"
+            <div class="history-item" v-for="h in historyEntry?.historyRecords||[]" :key="h.version"
                  :style="{background: h.version===historyEntry?.version ? 'var(--tag-bg)' : 'transparent'}">
               <span class="h-version">v{{ h.version }}</span>
               <span class="h-content">{{ h.content }}</span>
@@ -123,6 +136,20 @@
             </div>
           </div>
           <div class="modal-actions"><button class="btn" @click="historyModalVisible=false">{{ t('close') }}</button></div>
+        </div>
+      </div>
+
+      <div class="toast" v-if="toastMsg" @click="toastMsg=''">{{ toastMsg }}</div>
+
+      <!-- 用户ID设置弹窗 -->
+      <div class="modal-overlay" v-if="userIdModal.visible" @click.self="closeUserIdModal">
+        <div class="modal">
+          <h3>👤 Set User ID</h3>
+          <input v-model="userIdModal.inputId" placeholder="输入用户ID" style="width:100%;padding:8px;">
+          <div class="modal-actions">
+            <button class="btn accent" @click="confirmSetUserId">确认</button>
+            <button class="btn" @click="closeUserIdModal">{{ t('cancel') }}</button>
+          </div>
         </div>
       </div>
 
@@ -142,20 +169,32 @@ interface EntryHistoryItem {
   version: number
   content: string
   timestamp: number
+  userId: string
 }
 
+/** 词条复制记录 */
+interface EntryCopyItem {
+  id: string
+  version: number
+  content: string
+  timestamp: number
+  userId: string
+  entryId: string
+}
+
+/** 词条主体 */
 interface Entry {
   id: string
   parentId: string | null
   content: string
   version: number
-  history: EntryHistoryItem[]
+  historyRecords: EntryHistoryItem[] | []
+  copyRecords: EntryCopyItem[] | []
   isDeleted: boolean
   deletedAt: number | null
   createdAt: number
   updatedAt: number
-  copyCount: number
-  modifyCount: number
+  userId: string
 }
 
 interface EditModalState {
@@ -166,6 +205,11 @@ interface EditModalState {
   content: string
 }
 
+interface UserIdModalState {
+  visible: boolean
+  inputId: string
+}
+
 interface BreadcrumbItem {
   id: string
   content: string
@@ -174,6 +218,7 @@ interface BreadcrumbItem {
 // ==================== 常量 & 工具函数 抽离封装 ====================
 const STORAGE_KEY = 'entry-reader-data'
 const SETTINGS_KEY = 'entry-reader-settings'
+const USER_ID_KEY = 'entry-user-id'
 const SEARCH_SIMILARITY_THRESHOLD = 0.25
 
 // UUID生成
@@ -220,6 +265,13 @@ const escapeXml = (str: string): string => str
 const { t, locale } = useI18n()
 
 // ==================== 响应式状态 ====================
+// 用户ID全局
+const currentUserId = ref<string>('')
+const userIdModal = ref<UserIdModalState>({
+  visible: false,
+  inputId: ''
+})
+
 const allEntries = ref<Entry[]>([])
 const showRecycleBin = ref<boolean>(false)
 const viewMode = ref<'tree' | 'breadcrumb' | 'flat'>('tree')
@@ -328,8 +380,12 @@ const filteredCount = computed(() => displayEntries.value.length)
 // 词条排序权重
 const sortScore = (e: Entry): number => {
   const now = Date.now()
-  const age = (now - (e.updatedAt || e.createdAt || now)) / 3600000
-  return (1 / (1 + age * 0.1)) * 10 + (e.copyCount || 0) * 0.5 + (e.modifyCount || 0) * 0.3
+  const age = (now - e.updatedAt) / 3600000
+  // 修改次数 = 历史记录条数
+  const modifyCount = (e.historyRecords||[]).length
+  // 复制次数 = 复制记录数组长度
+  const copyCount = (e.copyRecords||[]).length
+  return (1 / (1 + age * 0.1)) * 10 + copyCount * 0.5 + modifyCount * 0.3
 }
 
 // 获取未删除子节点
@@ -391,6 +447,7 @@ const saveSettings = (): void => {
       lang: currentLang.value,
       viewMode: viewMode.value
     }))
+    localStorage.setItem(USER_ID_KEY, currentUserId.value)
   } catch (e) {}
 }
 const loadSettings = (): void => {
@@ -405,6 +462,9 @@ const loadSettings = (): void => {
       }
       if (s.viewMode) viewMode.value = s.viewMode
     }
+    // 读取保存的用户ID
+    const savedUid = localStorage.getItem(USER_ID_KEY) || 'anonymous user'
+    if (savedUid) currentUserId.value = savedUid
   } catch (e) {}
   setTheme()
 }
@@ -420,13 +480,43 @@ const setLang = (): void => {
   saveSettings()
 }
 
-// 复制文本
-const copyEntryText = (entryId: string): void => {
+// ========== 用户ID弹窗逻辑 ==========
+const openUserIdModal = () => {
+  userIdModal.value.inputId = currentUserId.value
+  userIdModal.value.visible = true
+}
+const confirmSetUserId = () => {
+  const val = userIdModal.value.inputId.trim()
+  currentUserId.value = val
+  saveSettings()
+  userIdModal.value.visible = false
+  showToast(`用户ID已设置：${val || '空'}`)
+}
+const closeUserIdModal = () => {
+  userIdModal.value.visible = false
+}
+
+// 复制文本（生成复制记录，不再累加数字）
+const copyEntry = (entryId: string): void => {
   const entry = entryMap.value[entryId]
-  if (!entry) return
+  if (!entry || !currentUserId.value) {
+    showToast('请先设置用户ID')
+    return
+  }
+  const now = Date.now()
+  const copyRecord: EntryCopyItem = {
+    id: uuid(),
+    entryId: entry.id,
+    content: entry.content,
+    version: entry.version,
+    timestamp: now,
+    userId: currentUserId.value
+  }
+
   navigator.clipboard.writeText(entry.content)
     .then(() => {
-      entry.copyCount = (entry.copyCount || 0) + 1
+      if (!entry.copyRecords) entry.copyRecords = [];
+      entry.copyRecords.push(copyRecord);
       saveData()
       showToast('📋 ' + t('copied'))
     })
@@ -437,14 +527,19 @@ const copyEntryText = (entryId: string): void => {
       ta.select()
       document.execCommand('copy')
       document.body.removeChild(ta)
-      entry.copyCount = (entry.copyCount || 0) + 1
+      if (!entry.copyRecords) entry.copyRecords = [];
+      entry.copyRecords.push(copyRecord);
       saveData()
       showToast('📋 ' + t('copied'))
     })
 }
 
 // 弹窗操作
-const openAddModal = (parentId: string | null): void => {
+const addChild = (parentId: string | null): void => {
+  if (!currentUserId.value) {
+    showToast('请先设置用户ID')
+    return
+  }
   editModal.value = {
     visible: true,
     mode: 'add',
@@ -453,7 +548,11 @@ const openAddModal = (parentId: string | null): void => {
     content: ''
   }
 }
-const openEditModal = (entryId: string): void => {
+const editEntry = (entryId: string): void => {
+  if (!currentUserId.value) {
+    showToast('请先设置用户ID')
+    return
+  }
   const e = entryMap.value[entryId]
   if (!e) return
   editModal.value = {
@@ -485,13 +584,13 @@ const submitEditModal = (): void => {
       parentId: parentId || null,
       content: line.trim(),
       version: 1,
-      history: [{ version: 1, content: line.trim(), timestamp: now }],
+      history: [],
+      copyRecords: [],
       isDeleted: false,
       deletedAt: null,
       createdAt: now,
       updatedAt: now,
-      copyCount: 0,
-      modifyCount: 0
+      userId: currentUserId.value
     }))
     allEntries.value.push(...newEntries)
     saveData()
@@ -504,12 +603,18 @@ const submitEditModal = (): void => {
       editModal.value.visible = false
       return
     }
+    // 编辑前的内容存入history（仅存历史，当前不进历史）
+    if (!entry.historyRecords) entry.historyRecords = []
+    entry.historyRecords.push({
+      version: entry.version,
+      content: entry.content,
+      timestamp: now,
+      userId: currentUserId.value
+    })
+    // 版本+1
+    entry.version += 1
     entry.content = trimContent
-    entry.version = (entry.version || 0) + 1
-    entry.modifyCount = (entry.modifyCount || 0) + 1
     entry.updatedAt = now
-    if (!entry.history) entry.history = []
-    entry.history.push({ version: entry.version, content: trimContent, timestamp: now })
     saveData()
     showToast(`${t('saved')} v${entry.version}`)
   }
@@ -548,14 +653,21 @@ const showHistory = (id: string): void => {
 const restoreVersion = (entryId: string, version: number): void => {
   const e = entryMap.value[entryId]
   if (!e) return
-  const hist = e.history?.find(h => h.version === version)
+  const hist = e.historyRecords?.find(h => h.version === version)
   if (!hist) return
   const now = Date.now()
+  // 当前内容存入历史
+  if (!entry.historyRecords) entry.historyRecords = []
+  e.historyRecords.push({
+    version: e.version,
+    content: e.content,
+    timestamp: now,
+    userId: currentUserId.value
+  })
+  // 回滚到旧内容，版本+1
   e.content = hist.content
-  e.version = (e.version || 0) + 1
-  e.modifyCount = (e.modifyCount || 0) + 1
+  e.version += 1
   e.updatedAt = now
-  e.history.push({ version: e.version, content: hist.content, timestamp: now })
   saveData()
   showToast(`${t('versionRestored')} → v${e.version}`)
   historyModalVisible.value = false
@@ -652,7 +764,7 @@ const handleImportFile = (e: Event): void => {
   reader.readAsText(file)
 }
 
-// Excel导入（增加XLSX存在判断）
+// Excel导入
 const handleExcelImport = async (file: File): Promise<void> => {
   if (!XLSX) {
     showToast('未引入SheetJS(XLSX)库，无法导入Excel')
@@ -674,6 +786,8 @@ const handleExcelImport = async (file: File): Promise<void> => {
         return
       }
       const historyMap: Record<string, EntryHistoryItem[]> = {}
+      const copyMap: Record<string, EntryCopyItem[]> = {}
+      // 第二工作表：历史记录
       if (wb.SheetNames.length > 1) {
         const sheet2 = wb.Sheets[wb.SheetNames[1]]
         const rows2 = XLSX.utils.sheet_to_json(sheet2, { header: 1 }) as any[][]
@@ -683,6 +797,7 @@ const handleExcelImport = async (file: File): Promise<void> => {
           const verIdx = headers2.indexOf('version')
           const contIdx = headers2.indexOf('content')
           const timeIdx = headers2.indexOf('timestamp')
+          const uidIdx = headers2.indexOf('userid')
           for (let i = 1; i < rows2.length; i++) {
             const row = rows2[i]
             if (!row) continue
@@ -690,9 +805,37 @@ const handleExcelImport = async (file: File): Promise<void> => {
             const ver = parseInt(row[verIdx]) || 1
             const cont = row[contIdx]?.toString() || ''
             const ts = new Date(row[timeIdx]).getTime() || Date.now()
+            const uid = row[uidIdx]?.toString() || ''
             if (!eid) continue
             if (!historyMap[eid]) historyMap[eid] = []
-            historyMap[eid].push({ version: ver, content: cont, timestamp: ts })
+            historyMap[eid].push({ version: ver, content: cont, timestamp: ts, userId: uid })
+          }
+        }
+      }
+      // 第三工作表：复制记录
+      if (wb.SheetNames.length > 2) {
+        const sheet3 = wb.Sheets[wb.SheetNames[2]]
+        const rows3 = XLSX.utils.sheet_to_json(sheet3, { header: 1 }) as any[][]
+        if (rows3.length > 1) {
+          const headers3 = rows3[0].map(h => String(h).toLowerCase().trim())
+          const eidIdx = headers3.indexOf('entryid')
+          const verIdx = headers3.indexOf('version')
+          const contIdx = headers3.indexOf('content')
+          const timeIdx = headers3.indexOf('timestamp')
+          const uidIdx = headers3.indexOf('userid')
+          const idIdx = headers3.indexOf('id')
+          for (let i = 1; i < rows3.length; i++) {
+            const row = rows3[i]
+            if (!row) continue
+            const eid = row[eidIdx]?.toString() || ''
+            const ver = parseInt(row[verIdx]) || 1
+            const cont = row[contIdx]?.toString() || ''
+            const ts = new Date(row[timeIdx]).getTime() || Date.now()
+            const uid = row[uidIdx]?.toString() || ''
+            const recId = row[idIdx]?.toString() || uuid()
+            if (!eid) continue
+            if (!copyMap[eid]) copyMap[eid] = []
+            copyMap[eid].push({ id: recId, entryId: eid, version: ver, content: cont, timestamp: ts, userId: uid })
           }
         }
       }
@@ -701,12 +844,11 @@ const handleExcelImport = async (file: File): Promise<void> => {
       const pidCol = headers1.indexOf('parentid')
       const contentCol = headers1.indexOf('content')
       const versionCol = headers1.indexOf('version')
-      const copyCountCol = headers1.indexOf('copycount')
-      const modifyCountCol = headers1.indexOf('modifycount')
       const createdAtCol = headers1.indexOf('createdat')
       const updatedAtCol = headers1.indexOf('updatedat')
       const isDeletedCol = headers1.indexOf('isdeleted')
       const deletedAtCol = headers1.indexOf('deletedat')
+      const uidCol = headers1.indexOf('userid')
       if (contentCol < 0) {
         showToast('表格缺少content列')
         return
@@ -725,13 +867,13 @@ const handleExcelImport = async (file: File): Promise<void> => {
           parentId: (pidCol >= 0 && row[pidCol]) ? String(row[pidCol]) : null,
           content: String(row[contentCol]).trim(),
           version: (versionCol >= 0 && row[versionCol]) ? parseInt(row[versionCol]) || 1 : 1,
-          copyCount: (copyCountCol >= 0) ? (parseInt(row[copyCountCol]) || 0) : 0,
-          modifyCount: (modifyCountCol >= 0) ? (parseInt(row[modifyCountCol]) || 0) : 0,
+          copyRecords: [],
+          history: [],
+          userId: (uidCol >= 0 && row[uidCol]) ? String(row[uidCol]) : currentUserId.value,
           createdAt: (createdAtCol >= 0) ? (new Date(row[createdAtCol]).getTime() || now) : now,
           updatedAt: (updatedAtCol >= 0) ? (new Date(row[updatedAtCol]).getTime() || now) : now,
           isDeleted: (isDeletedCol >= 0) ? (String(row[isDeletedCol]).toLowerCase() === 'true') : false,
           deletedAt: (deletedAtCol >= 0) ? (new Date(row[deletedAtCol]).getTime() || null) : null,
-          history: []
         }
         newEntries.push(entry)
       }
@@ -744,13 +886,14 @@ const handleExcelImport = async (file: File): Promise<void> => {
           if (nid === entry.id) { oldIdForEntry = old; break }
         }
         if (oldIdForEntry && historyMap[oldIdForEntry]) {
-          entry.history = historyMap[oldIdForEntry].sort((a, b) => a.version - b.version)
-          if (entry.history.length > 0) {
-            const maxVer = Math.max(...entry.history.map(h => h.version))
-            entry.version = maxVer
+          entry.historyRecords = historyMap[oldIdForEntry].sort((a, b) => a.version - b.version)
+          if (entry.historyRecords.length > 0) {
+            const maxVer = Math.max(...entry.historyRecords.map(h => h.version))
+            entry.version = maxVer + 1
           }
-        } else {
-          entry.history = [{ version: entry.version || 1, content: entry.content, timestamp: entry.createdAt }]
+        }
+        if (oldIdForEntry && copyMap[oldIdForEntry]) {
+          entry.copyRecords = copyMap[oldIdForEntry]
         }
       }
       allEntries.value.push(...newEntries)
@@ -776,6 +919,8 @@ const mergeImportedEntries = (newEntries: Entry[]): void => {
   })
   newEntries.forEach(e => {
     if (e.parentId && idMap[e.parentId]) e.parentId = idMap[e.parentId]
+    // 导入无用户ID时填充当前用户
+    if (!e.userId) e.userId = currentUserId.value
   })
   allEntries.value.push(...newEntries)
   saveData()
@@ -796,13 +941,13 @@ const parseJSON = (text: string): Entry[] => {
         parentId: pid || null,
         content: n.content || n.text || '',
         version: n.version || 1,
-        history: n.history || [{ version: 1, content: n.content || n.text || '', timestamp: now }],
+        history: Array.isArray(n.historyRecords) ? n.historyRecords : [],
+        copyRecords: Array.isArray(n.copyRecords) ? n.copyRecords : [],
         isDeleted: n.isDeleted || false,
-        copyCount: n.copyCount || 0,
-        modifyCount: n.modifyCount || 0,
+        deletedAt: null,
         createdAt: n.createdAt || now,
         updatedAt: n.updatedAt || now,
-        deletedAt: null
+        userId: n.userId || currentUserId.value
       }
       flat.push(entry)
       if (n.children) flatten(n.children, entry.id)
@@ -828,13 +973,13 @@ const parseXML = (text: string): Entry[] => {
           parentId: pid || null,
           content: c,
           version: parseInt(child.getAttribute('version') || '1'),
-          history: [{ version: 1, content: c, timestamp: now }],
+          history: [],
+          copyRecords: [],
           isDeleted: child.getAttribute('isDeleted') === 'true',
-          copyCount: parseInt(child.getAttribute('copyCount') || '0'),
-          modifyCount: parseInt(child.getAttribute('modifyCount') || '0'),
+          deletedAt: null,
           createdAt: now,
           updatedAt: now,
-          deletedAt: null
+          userId: currentUserId.value
         }
         flat.push(entry)
         parseNode(child, flat[flat.length - 1].id)
@@ -849,8 +994,8 @@ const parseTXT = (text: string): Entry[] => {
   const now = Date.now()
   return lines.map(l => ({
     id: uuid(), parentId: null, content: l.trim(), version: 1,
-    history: [{ version: 1, content: l.trim(), timestamp: now }],
-    isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, copyCount: 0, modifyCount: 0
+    history: [], copyRecords: [],
+    isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
   }))
 }
 const parseYML = (text: string): Entry[] => {
@@ -867,8 +1012,8 @@ const parseYML = (text: string): Entry[] => {
     const pid = stack.length > 0 ? stack[stack.length - 1].id : null
     const entry: Entry = {
       id: uuid(), parentId: pid, content, version: 1,
-      history: [{ version: 1, content, timestamp: now }],
-      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, copyCount: 0, modifyCount: 0
+      history: [], copyRecords: [],
+      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
     }
     flat.push(entry)
     stack.push({ indent, id: entry.id })
@@ -896,8 +1041,8 @@ const parseProperties = (text: string): Entry[] => {
     }
     const entry: Entry = {
       id: uuid(), parentId: pid, content: val, version: 1,
-      history: [{ version: 1, content: val, timestamp: now }],
-      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, copyCount: 0, modifyCount: 0
+      history: [], copyRecords: [],
+      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
     }
     flat.push(entry)
     pathMap[key] = entry.id
@@ -922,8 +1067,9 @@ const parseCSV = (text: string): Entry[] => {
       parentId: (pidCol >= 0 && cols[pidCol]) ? cols[pidCol] : null,
       content: cols[contentCol],
       version: 1,
-      history: [{ version: 1, content: cols[contentCol], timestamp: now }],
-      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, copyCount: 0, modifyCount: 0
+      history: [],
+      copyRecords: [],
+      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
     })
   }
   return entries
@@ -990,9 +1136,9 @@ const buildTreeForExport = (entries: Entry[]): { entries: ExportTreeItem[] } => 
     else roots.push(map[e.id])
   })
   const clean = (n: ExportTreeItem): ExportTreeItem => {
-    const { id, parentId, content, version, history, copyCount, modifyCount, createdAt, updatedAt, children } = n
-    if (!children || children.length === 0) return { id, parentId, content, version, history, copyCount, modifyCount, createdAt, updatedAt }
-    return { id, parentId, content, version, history, copyCount, modifyCount, createdAt, updatedAt, children: children.map(clean) }
+    const { id, parentId, content, version, history, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted, children } = n
+    if (!children || children.length === 0) return { id, parentId, content, version, history, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted }
+    return { id, parentId, content, version, history, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted, children: children.map(clean) }
   }
   return { entries: roots.map(clean) }
 }
@@ -1004,7 +1150,7 @@ const buildXML = (entries: Entry[]): string => {
   const render = (e: Entry, ind: number): void => {
     const s = '  '.repeat(ind)
     const esc = escapeXml(e.content)
-    xml += `${s}<entry id="${e.id}" parentId="${e.parentId || ''}" content="${esc}" version="${e.version}" copyCount="${e.copyCount || 0}" modifyCount="${e.modifyCount || 0}" isDeleted="${e.isDeleted}">\n`
+    xml += `${s}<entry id="${e.id}" parentId="${e.parentId || ''}" content="${esc}" version="${e.version}" userId="${e.userId}" isDeleted="${e.isDeleted}">\n`
     const children = entries.filter(c => c.parentId === e.id)
     children.forEach(c => render(c, ind + 1))
     xml += `${s}</entry>\n`
@@ -1046,43 +1192,43 @@ const buildProperties = (entries: Entry[]): string => {
   return p;
 };
 const buildExcel = (entries: Entry[]): Uint8Array => {
-  // 主表数据
-  const mainRows: (string | number | null)[][] = [['id', 'parentId', 'content', 'version', 'copyCount', 'modifyCount', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']];
+  // 主词条表
+  const mainRows: (string | number | null)[][] = [['id', 'parentId', 'content', 'version', 'userId', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']];
   entries.forEach(e => {
     mainRows.push([
       e.id,
       e.parentId || '',
       e.content,
-      e.version || 1,
-      e.copyCount || 0,
-      e.modifyCount || 0,
+      e.version,
+      e.userId,
       new Date(e.createdAt).toISOString(),
-      new Date(e.updatedAt || e.createdAt).toISOString(),
+      new Date(e.updatedAt).toISOString(),
       e.isDeleted ? 'true' : 'false',
       e.deletedAt ? new Date(e.deletedAt).toISOString() : null
     ]);
   });
-
-  // 历史表数据
-  const historyRows: (string | number)[][] = [['entryId', 'version', 'content', 'timestamp']];
+  // 历史记录表
+  const historyRows: (string | number)[][] = [['entryId', 'version', 'content', 'timestamp', 'userId']];
   entries.forEach(e => {
-    if (e.history && Array.isArray(e.history)) {
-      e.history.forEach(h => {
-        historyRows.push([
-          e.id,
-          h.version,
-          h.content,
-          new Date(h.timestamp).toISOString()
-        ]);
-      });
-    }
-  });
+    e.historyRecords.forEach(h => {
+      historyRows.push([e.id, h.version, h.content, new Date(h.timestamp).toISOString(), h.userId])
+    })
+  })
+  // 复制记录表
+  const copyRows: (string | number)[][] = [['id', 'entryId', 'version', 'content', 'timestamp', 'userId']];
+  entries.forEach(e => {
+    e.copyRecords.forEach(c => {
+      copyRows.push([c.id, e.id, c.version, c.content, new Date(c.timestamp).toISOString(), c.userId])
+    })
+  })
 
   const wsMain = XLSX.utils.aoa_to_sheet(mainRows);
   const wsHistory = XLSX.utils.aoa_to_sheet(historyRows);
+  const wsCopy = XLSX.utils.aoa_to_sheet(copyRows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, wsMain, t('entries'));
-  XLSX.utils.book_append_sheet(wb, wsHistory, t('historyEntries'));
+  XLSX.utils.book_append_sheet(wb, wsHistory, 'history');
+  XLSX.utils.book_append_sheet(wb, wsCopy, 'copyRecords');
   return new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
 };
 

@@ -8,10 +8,10 @@
               {{ entry.isDeleted ? '🗑️ ' : '' }}{{ entry.content }}
             </span>
       <span class="meta-tags">
-              <span class="tag">v{{ entry.version }}</span>
-              <span class="tag" v-if="entry.copyCount>0">📋{{ entry.copyCount }}</span>
-              <span class="tag" v-if="entry.modifyCount>0">✏️{{ entry.modifyCount }}</span>
-            </span>
+            <span class="tag">v{{ entry.version }}</span>
+            <span class="tag">✏️{{ (entry.historyRecords||[]).length }}</span>
+            <span class="tag" v-if="(entry.copyRecords||[]).length>0">📋{{ (entry.copyRecords||[]).length }}</span>
+      </span>
       <span class="actions" :class="{'always-visible': isRecycle}">
             <button class="btn btn-small icon-only" @click.stop="copyText" title="复制文本">📋</button>
             <button class="btn btn-small icon-only" @click.stop="addChild" title="新增子词条" v-if="!entry.isDeleted && !isRecycle">➕</button>
@@ -34,6 +34,12 @@
                           :get-all-children-fn="getAllChildrenFn"
                           :sort-score-fn="sortScoreFn"
                           :is-top-deleted-fn="isTopDeletedFn"
+                          @copy="copyText"
+                          @add-child="addChild"
+                          @edit="editEntry"
+                          @history="showHistory"
+                          @delete="deleteEntry"
+                          @restore="restoreEntry"
                           @update="$emit('update')">
 
       </entry-row-renderer>
@@ -49,19 +55,31 @@ interface EntryHistoryItem {
   version: number
   content: string
   timestamp: number
+  userId: string
 }
+
+/** 词条复制记录 */
+interface EntryCopyItem {
+  id: string
+  version: number
+  timestamp: number
+  userId: string
+  entryId: string
+}
+
+/** 词条主体 */
 interface Entry {
   id: string
   parentId: string | null
   content: string
   version: number
-  history: EntryHistoryItem[]
+  historyRecords: EntryHistoryItem[] | []
+  copyRecords: EntryCopyItem[] | []
   isDeleted: boolean
   deletedAt: number | null
   createdAt: number
   updatedAt: number
-  copyCount: number
-  modifyCount: number
+  userId: string
 }
 
 // Props 完整类型约束
