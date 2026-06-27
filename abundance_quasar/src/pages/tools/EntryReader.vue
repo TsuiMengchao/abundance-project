@@ -96,6 +96,7 @@
                                 @history="showHistory"
                                 @delete="deleteEntry"
                                 @restore="restoreEntry"
+                                @drill="drillDownList"
                                 @update="refreshData">
 
             </entry-row-renderer>
@@ -166,6 +167,7 @@ import EntryRowRenderer from '@/components/EntryRowRenderer.vue'
 // ==================== 类型定义 ====================
 interface EntryHistoryItem {
   id: string
+  entryId: string
   content: string
   timestamp: number
   userId: string
@@ -185,8 +187,8 @@ interface Entry {
   id: string
   parentId: string | null
   content: string
-  historyRecords: EntryHistoryItem[] | []
-  copyRecords: EntryCopyItem[] | []
+  historyRecords: EntryHistoryItem[]
+  copyRecords: EntryCopyItem[]
   isDeleted: boolean
   deletedAt: number | null
   createdAt: number
@@ -212,8 +214,166 @@ interface BreadcrumbItem {
   content: string
 }
 
-// ==================== 常量 & 工具函数 抽离封装 ====================
-const STORAGE_KEY = 'entry-reader-data'
+// ==================== IndexedDB 封装工具 ====================
+const DB_NAME = 'EntryReaderDB'
+const DB_VERSION = 1
+let dbInstance: IDBDatabase | null = null
+
+/** 初始化数据库与对象仓库 */
+const initDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    if (dbInstance) return resolve(dbInstance)
+    const req = indexedDB.open(DB_NAME, DB_VERSION)
+    req.onupgradeneeded = (ev) => {
+      const db = (ev.target as IDBOpenDBRequest).result
+      // 词条主表
+      if (!db.objectStoreNames.contains('entries')) {
+        const store = db.createObjectStore('entries', { keyPath: 'id' })
+        store.createIndex('idx_parentId', 'parentId')
+      }
+      // 历史记录子表
+      if (!db.objectStoreNames.contains('historyRecords')) {
+        const store = db.createObjectStore('historyRecords', { keyPath: 'id' })
+        store.createIndex('idx_entryId', 'entryId')
+      }
+      // 复制记录子表
+      if (!db.objectStoreNames.contains('copyRecords')) {
+        const store = db.createObjectStore('copyRecords', { keyPath: 'id' })
+        store.createIndex('idx_entryId', 'entryId')
+      }
+    }
+    req.onsuccess = (ev) => {
+      dbInstance = (ev.target as IDBOpenDBRequest).result
+      resolve(dbInstance!)
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/** 工具：剥离history/copyRecords，生成纯净可入库主词条对象（解决Proxy克隆报错） */
+const getPureEntry = (e: Entry): Omit<Entry, 'historyRecords' | 'copyRecords'> => ({
+  id: e.id,
+  parentId: e.parentId,
+  content: e.content,
+  isDeleted: e.isDeleted,
+  deletedAt: e.deletedAt,
+  createdAt: e.createdAt,
+  updatedAt: e.updatedAt,
+  userId: e.userId
+})
+
+/** 保存单条主词条（内部自动浅拷贝剥离Vue Proxy） */
+const saveEntryToDB = async (entryRaw: Omit<Entry, 'historyRecords' | 'copyRecords'>): Promise<void> => {
+  const db = await initDB()
+  const entry = { ...entryRaw }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('entries', 'readwrite')
+    const store = tx.objectStore('entries')
+    store.put(entry)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** 删除单条主词条 */
+const deleteEntryFromDB = async (id: string): Promise<void> => {
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('entries', 'readwrite')
+    const store = tx.objectStore('entries')
+    store.delete(id)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** 批量添加历史记录（每条自动浅拷贝） */
+const addHistoryToDB = async (items: EntryHistoryItem[]): Promise<void> => {
+  if (!items.length) return
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('historyRecords', 'readwrite')
+    const store = tx.objectStore('historyRecords')
+    items.forEach(item => store.put({ ...item }))
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** 批量添加复制记录（每条自动浅拷贝） */
+const addCopyToDB = async (items: EntryCopyItem[]): Promise<void> => {
+  if (!items.length) return
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('copyRecords', 'readwrite')
+    const store = tx.objectStore('copyRecords')
+    items.forEach(item => store.put({ ...item }))
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** 全量清空重写（仅初始化导入兜底使用） */
+const saveAllToDB = async (entries: Entry[]): Promise<void> => {
+  const db = await initDB()
+  const tx = db.transaction(['entries', 'historyRecords', 'copyRecords'], 'readwrite')
+  const entryStore = tx.objectStore('entries')
+  const histStore = tx.objectStore('historyRecords')
+  const copyStore = tx.objectStore('copyRecords')
+
+  await Promise.all([
+    new Promise(r => entryStore.clear().onsuccess = r),
+    new Promise(r => histStore.clear().onsuccess = r),
+    new Promise(r => copyStore.clear().onsuccess = r)
+  ])
+
+  for (const entry of entries) {
+    const entryPure = getPureEntry(entry)
+    entryStore.put({ ...entryPure })
+    entry.historyRecords.forEach(h => histStore.put({ ...h }))
+    entry.copyRecords.forEach(c => copyStore.put({ ...c }))
+  }
+
+  await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej })
+}
+
+/** 全量读取组装完整词条树（仅页面初始化） */
+const loadAllFromDB = async (): Promise<Entry[]> => {
+  const db = await initDB()
+  const tx = db.transaction(['entries', 'historyRecords', 'copyRecords'], 'readonly')
+  const entryStore = tx.objectStore('entries')
+  const histStore = tx.objectStore('historyRecords')
+  const copyStore = tx.objectStore('copyRecords')
+
+  const entriesPure = await new Promise<Omit<Entry, 'historyRecords' | 'copyRecords'>[]>(res => {
+    const req = entryStore.getAll(); req.onsuccess = () => res(req.result)
+  })
+  const allHistory = await new Promise<EntryHistoryItem[]>(res => {
+    const req = histStore.getAll(); req.onsuccess = () => res(req.result)
+  })
+  const allCopy = await new Promise<EntryCopyItem[]>(res => {
+    const req = copyStore.getAll(); req.onsuccess = () => res(req.result)
+  })
+
+  const histMap: Record<string, EntryHistoryItem[]> = {}
+  const copyMap: Record<string, EntryCopyItem[]> = {}
+  allHistory.forEach(h => {
+    if (!histMap[h.entryId]) histMap[h.entryId] = []
+    histMap[h.entryId].push(h)
+  })
+  allCopy.forEach(c => {
+    if (!copyMap[c.entryId]) copyMap[c.entryId] = []
+    copyMap[c.entryId].push(c)
+  })
+
+  return entriesPure.map(pure => ({
+    ...pure,
+    historyRecords: histMap[pure.id] ?? [],
+    copyRecords: copyMap[pure.id] ?? []
+  }))
+}
+
+// ==================== 常量 & 工具函数 ====================
 const SETTINGS_KEY = 'entry-reader-settings'
 const USER_ID_KEY = 'entry-user-id'
 const SEARCH_SIMILARITY_THRESHOLD = 0.25
@@ -223,20 +383,14 @@ const uuid = (): string => 'e_' + Date.now().toString(36) + '_' + Math.random().
 
 // 实时计算词条当前版本号：历史条数 + 1
 const getEntryVersion = (entry: Entry): number => {
-  const historyLen = Array.isArray(entry.historyRecords) ? entry.historyRecords.length : 0
-  return historyLen + 1
+  return (entry.historyRecords?.length || 0) + 1
 }
 
 
 // 根据历史记录ID，获取该历史快照对应的旧版本号
 const getEntryHistoryVersion = (entry: Entry, historyItemId: string): number => {
-  const rawList = Array.isArray(entry.historyRecords) ? entry.historyRecords : []
-  // 按时间正序（旧→新）排序
-  const sortedHistory = [...rawList].sort((a, b) => a.timestamp - b.timestamp)
-  const targetIndex = sortedHistory.findIndex(item => item.id === historyItemId)
-  if (targetIndex === -1) return 0
-  // 排序后下标+1即为该快照当时的版本号
-  return targetIndex + 1
+  const sorted = [...(entry.historyRecords || [])].sort((a, b) => a.timestamp - b.timestamp)
+  return sorted.findIndex(i => i.id === historyItemId) + 1
 }
 
 // 编辑距离算法
@@ -248,8 +402,7 @@ const levenshteinDistance = (a: string, b: string): number => {
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
+        dp[i - 1][j] + 1, dp[i][j - 1] + 1,
         dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
       )
     }
@@ -257,7 +410,6 @@ const levenshteinDistance = (a: string, b: string): number => {
   return dp[m][n]
 }
 
-// 文本相似度
 const similarity = (a: string, b: string): number => {
   const al = a.toLowerCase(), bl = b.toLowerCase()
   if (al.includes(bl) || bl.includes(al)) {
@@ -265,27 +417,19 @@ const similarity = (a: string, b: string): number => {
   }
   const len = Math.max(al.length, bl.length)
   if (len === 0) return 1
-  const d = levenshteinDistance(al, bl)
-  return Math.max(0, 1 - d / len)
+  return 1 - levenshteinDistance(al, bl) / len
 }
 
 // XML特殊字符转义
 const escapeXml = (str: string): string => str
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-// ==================== i18n 语言包 ====================
+// ==================== i18n ====================
 const { t, locale } = useI18n()
 
 // ==================== 响应式状态 ====================
-// 用户ID全局
 const currentUserId = ref<string>('')
-const userIdModal = ref<UserIdModalState>({
-  visible: false,
-  inputId: ''
-})
+const userIdModal = ref<UserIdModalState>({ visible: false, inputId: '' })
 
 const allEntries = ref<Entry[]>([])
 const showRecycleBin = ref<boolean>(false)
@@ -303,85 +447,56 @@ const expandedIds = ref<Set<string>>(new Set())
 const importFileInput = ref<HTMLInputElement | null>(null)
 
 const editModal = ref<EditModalState>({
-  visible: false,
-  mode: 'add',
-  parentId: null,
-  entryId: null,
-  content: ''
+  visible: false, mode: 'add', parentId: null, entryId: null, content: ''
 })
 
 // ==================== 计算属性 ====================
 const entryMap: ComputedRef<Record<string, Entry>> = computed(() => {
-  const map: Record<string, Entry> = {}
-  allEntries.value.forEach(e => map[e.id] = e)
-  return map
+  return Object.fromEntries(allEntries.value.map(e => [e.id, e]))
 })
 
 const childrenMap: ComputedRef<Record<string, Entry[]>> = computed(() => {
   const map: Record<string, Entry[]> = {}
   allEntries.value.forEach(e => {
-    const pid = e.parentId || '__root__'
-    if (!map[pid]) map[pid] = []
-    map[pid].push(e)
+    const key = e.parentId || '__root__'
+    if (!map[key]) map[key] = []
+    map[key].push(e)
   })
-  // 统一排序
-  Object.keys(map).forEach(key => {
-    map[key].sort((a, b) => sortScore(b) - sortScore(a))
-  })
+  Object.values(map).forEach(list => list.sort((a, b) => sortScore(b) - sortScore(a)))
   return map
 })
 
-const rootEntries = computed(() => (childrenMap.value['__root__'] || []).filter(e => !e.isDeleted))
-const deletedRootEntries = computed(() => allEntries.value.filter(e => e.isDeleted).filter(e => {
-  if (!e.parentId) return true
-  const p = entryMap.value[e.parentId]
-  return !p || !p.isDeleted
-}))
+const rootEntries = computed(() => (childrenMap.value.__root__ || []).filter(e => !e.isDeleted))
+const deletedRootEntries = computed(() => allEntries.value.filter(e => e.isDeleted && isTopDeleted(e)))
 
 // 展示列表主逻辑
 const displayEntries = computed((): Entry[] => {
   const entries = allEntries.value
   const cm = childrenMap.value
-  const em = entryMap.value
 
   // 平铺模式
   if (viewMode.value === 'flat') {
-    let list = showRecycleBin.value
-      ? entries.filter(e => e.isDeleted)
-      : entries.filter(e => !e.isDeleted)
-    if (searchQuery.value) {
-      list = list.filter(e => similarity(e.content, searchQuery.value) > SEARCH_SIMILARITY_THRESHOLD)
-    }
-    list.sort((a, b) => sortScore(b) - sortScore(a))
-    return list
+    let list = showRecycleBin.value ? entries.filter(e => e.isDeleted) : entries.filter(e => !e.isDeleted)
+    if (searchQuery.value) list = list.filter(e => similarity(e.content, searchQuery.value) > SEARCH_SIMILARITY_THRESHOLD)
+    return list.sort((a, b) => sortScore(b) - sortScore(a))
   }
 
   // 树形模式
   if (viewMode.value === 'tree') {
-    let roots = showRecycleBin.value ? deletedRootEntries.value : rootEntries.value
     if (searchQuery.value) {
-      const active = entries.filter(e => !e.isDeleted)
-      return active.filter(e => similarity(e.content, searchQuery.value) > SEARCH_SIMILARITY_THRESHOLD)
+      return entries.filter(e => !e.isDeleted && similarity(e.content, searchQuery.value) > SEARCH_SIMILARITY_THRESHOLD)
         .sort((a, b) => sortScore(b) - sortScore(a))
     }
-    return roots
+    return showRecycleBin.value ? deletedRootEntries.value : rootEntries.value
   }
 
   // 面包屑层级模式
   if (viewMode.value === 'breadcrumb') {
-    let parentId: string | null = null
-    if (breadcrumbStack.value.length > 0) {
-      parentId = breadcrumbStack.value[breadcrumbStack.value.length - 1].id
-    }
-    let list: Entry[]
-    if (showRecycleBin.value) {
-      list = parentId ? entries.filter(e => e.parentId === parentId) : deletedRootEntries.value
-    } else {
-      list = parentId ? getChildren(parentId) : rootEntries.value
-    }
-    if (searchQuery.value) {
-      list = list.filter(e => similarity(e.content, searchQuery.value) > SEARCH_SIMILARITY_THRESHOLD)
-    }
+    const pid = breadcrumbStack.value.at(-1)?.id || null
+    let list = showRecycleBin.value
+      ? (pid ? entries.filter(e => e.parentId === pid) : deletedRootEntries.value)
+      : (pid ? getChildren(pid) : rootEntries.value)
+    if (searchQuery.value) list = list.filter(e => similarity(e.content, searchQuery.value) > SEARCH_SIMILARITY_THRESHOLD)
     return list.sort((a, b) => sortScore(b) - sortScore(a))
   }
   return []
@@ -391,23 +506,20 @@ const activeCount = computed(() => allEntries.value.filter(e => !e.isDeleted).le
 const deletedCount = computed(() => allEntries.value.filter(e => e.isDeleted).length)
 const filteredCount = computed(() => displayEntries.value.length)
 
-// ==================== 公共方法 ====================
-// 词条排序权重
+// ==================== 公共工具方法 ====================
 const sortScore = (e: Entry): number => {
-  const now = Date.now()
-  const age = (now - e.updatedAt) / 3600000
-  // 修改次数 = 历史记录条数
-  const modifyCount = (e.historyRecords||[]).length
-  // 复制次数 = 复制记录数组长度
-  const copyCount = (e.copyRecords||[]).length
-  return (1 / (1 + age * 0.1)) * 10 + copyCount * 0.5 + modifyCount * 0.3
+  const age = (Date.now() - e.updatedAt) / 3600000
+  const modify = e.historyRecords?.length || 0
+  const copy = e.copyRecords?.length || 0
+  return 10 / (1 + age * 0.1) + copy * 0.5 + modify * 0.3
 }
 
-// 获取未删除子节点
-const getChildren = (pid: string | null): Entry[] => (childrenMap.value[pid || '__root__'] || []).filter(e => !e.isDeleted)
-// 获取全部子节点（含删除）
-const getAllChildren = (pid: string | null): Entry[] => childrenMap.value[pid || '__root__'] || []
-// 判断是否顶级删除条目
+const getChildren = (pid: string | null): Entry[] =>
+  (childrenMap.value[pid || '__root__'] || []).filter(e => !e.isDeleted)
+
+const getAllChildren = (pid: string | null): Entry[] =>
+  childrenMap.value[pid || '__root__'] || []
+
 const isTopDeleted = (entry: Entry): boolean => {
   if (!entry.isDeleted) return false
   if (!entry.parentId) return true
@@ -437,50 +549,40 @@ const refreshData = (): void => {
   allEntries.value = [...allEntries.value]
 }
 
-// 本地存储读写
-const saveData = (): void => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(allEntries.value))
-  } catch (err) {
-    showToast('数据保存失败：' + (err as Error).message)
-  }
+// 全量保存兜底（仅导入覆盖场景）
+const saveData = async (): Promise<void> => {
+  await saveAllToDB(allEntries.value)
 }
-const loadData = (): void => {
+
+const loadData = async (): Promise<void> => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) allEntries.value = JSON.parse(raw) as Entry[]
+    allEntries.value = await loadAllFromDB()
   } catch (err) {
     allEntries.value = []
     showToast('数据加载异常，已重置')
   }
-  if (!Array.isArray(allEntries.value)) allEntries.value = []
 }
+
 const saveSettings = (): void => {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      theme: currentTheme.value,
-      lang: currentLang.value,
-      viewMode: viewMode.value
+      theme: currentTheme.value, lang: currentLang.value, viewMode: viewMode.value
     }))
     localStorage.setItem(USER_ID_KEY, currentUserId.value)
-  } catch (e) {}
+  } catch {}
 }
+
 const loadSettings = (): void => {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (raw) {
-      const s = JSON.parse(raw) as { theme?: 'light' | 'dark'; lang?: 'zh-CN' | 'zh-TW' | 'en'; viewMode?: 'tree' | 'breadcrumb' | 'flat' }
+      const s = JSON.parse(raw)
       if (s.theme) currentTheme.value = s.theme
-      if (s.lang) {
-        currentLang.value = s.lang
-        locale.value = currentLang.value
-      }
+      if (s.lang) { currentLang.value = s.lang; locale.value = s.lang }
       if (s.viewMode) viewMode.value = s.viewMode
     }
-    // 读取保存的用户ID
-    const savedUid = localStorage.getItem(USER_ID_KEY) || 'anonymous user'
-    if (savedUid) currentUserId.value = savedUid
-  } catch (e) {}
+    currentUserId.value = localStorage.getItem(USER_ID_KEY) || 'anonymous'
+  } catch {}
   setTheme()
 }
 
@@ -500,6 +602,7 @@ const openUserIdModal = () => {
   userIdModal.value.inputId = currentUserId.value
   userIdModal.value.visible = true
 }
+
 const confirmSetUserId = () => {
   const val = userIdModal.value.inputId.trim()
   currentUserId.value = val
@@ -507,199 +610,162 @@ const confirmSetUserId = () => {
   userIdModal.value.visible = false
   showToast(`用户ID已设置：${val || '空'}`)
 }
+
 const closeUserIdModal = () => {
   userIdModal.value.visible = false
 }
 
-// 复制文本
-const copyEntry = (entryId: string): void => {
+// 复制词条
+const copyEntry = async (entryId: string): Promise<void> => {
   const entry = entryMap.value[entryId]
-  if (!entry || !currentUserId.value) {
-    showToast('请先设置用户ID')
-    return
-  }
+  if (!entry || !currentUserId.value) return showToast('请先设置用户ID')
+
   const now = Date.now()
   const copyRecord: EntryCopyItem = {
-    id: uuid(),
-    entryId: entry.id,
-    content: entry.content,
-    timestamp: now,
-    userId: currentUserId.value
+    id: uuid(), entryId: entry.id, content: entry.content, timestamp: now, userId: currentUserId.value
   }
 
-  navigator.clipboard.writeText(entry.content)
-    .then(() => {
-      if (!entry.copyRecords) entry.copyRecords = [];
-      entry.copyRecords.push(copyRecord);
-      saveData()
-      showToast('📋 ' + t('copied'))
-    })
-    .catch(() => {
-      const ta = document.createElement('textarea')
-      ta.value = entry.content
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-      if (!entry.copyRecords) entry.copyRecords = [];
-      entry.copyRecords.push(copyRecord);
-      saveData()
-      showToast('📋 ' + t('copied'))
-    })
+  try { await navigator.clipboard.writeText(entry.content) }
+  catch {
+    const ta = document.createElement('textarea')
+    ta.value = entry.content; document.body.appendChild(ta)
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
+  }
+
+  entry.copyRecords.push(copyRecord)
+  await addCopyToDB([copyRecord])
+  showToast('📋 ' + t('copied'))
 }
 
-// 弹窗操作
+// 新增词条弹窗
 const addChild = (parentId: string | null): void => {
-  if (!currentUserId.value) {
-    showToast('请先设置用户ID')
-    return
-  }
-  editModal.value = {
-    visible: true,
-    mode: 'add',
-    parentId: parentId || null,
-    entryId: null,
-    content: ''
-  }
+  if (!currentUserId.value) return showToast('请先设置用户ID')
+  editModal.value = { visible: true, mode: 'add', parentId, entryId: null, content: '' }
 }
+
 const editEntry = (entryId: string): void => {
-  if (!currentUserId.value) {
-    showToast('请先设置用户ID')
-    return
-  }
+  if (!currentUserId.value) return showToast('请先设置用户ID')
   const e = entryMap.value[entryId]
   if (!e) return
-  editModal.value = {
-    visible: true,
-    mode: 'edit',
-    parentId: null,
-    entryId,
-    content: e.content
-  }
+  editModal.value = { visible: true, mode: 'edit', parentId: null, entryId, content: e.content }
 }
+
 const cancelEditModal = (): void => {
   editModal.value.visible = false
 }
 
 // 提交新增/编辑
-const submitEditModal = (): void => {
+const submitEditModal = async (): Promise<void> => {
   const { mode, parentId, entryId, content } = editModal.value
-  const trimContent = content.trim()
-  if (!trimContent) {
-    showToast('内容不能为空')
-    return
-  }
+  const trim = content.trim()
+  if (!trim) return showToast('内容不能为空')
+
   const now = Date.now()
   if (mode === 'add') {
-    const lines = content.split('\n\n').filter(l => l.trim())
-    if (lines.length === 0) return
-    const newEntries: Entry[] = lines.map(line => ({
-      id: uuid(),
-      parentId: parentId || null,
-      content: line.trim(),
-      historyRecords: [],
-      copyRecords: [],
-      isDeleted: false,
-      deletedAt: null,
-      createdAt: now,
-      updatedAt: now,
-      userId: currentUserId.value
+    const lines = trim.split('\n\n').filter(l => l.trim())
+    const added: Entry[] = lines.map(line => ({
+      id: uuid(), parentId, content: line.trim(),
+      historyRecords: [], copyRecords: [], isDeleted: false, deletedAt: null,
+      createdAt: now, updatedAt: now, userId: currentUserId.value
     }))
-    allEntries.value.push(...newEntries)
-    saveData()
-    showToast(`${t('saved')} (${newEntries.length})`)
+    allEntries.value.push(...added)
+    // 逐条提取纯净对象入库
+    for (const e of added) {
+      await saveEntryToDB(getPureEntry(e))
+    }
+    showToast(`${t('saved')} (${added.length})`)
   } else {
     const entry = entryMap.value[entryId!]
     if (!entry) return
-    if (trimContent === entry.content) {
+    if (trim === entry.content) {
       showToast(t('contentUnchanged'))
       editModal.value.visible = false
       return
     }
-    // 编辑前的内容存入history
-    if (!entry.historyRecords) entry.historyRecords = []
-    entry.historyRecords.push({
-      id: uuid(),
-      content: entry.content,
-      timestamp: now,
-      userId: currentUserId.value
-    })
-    entry.content = trimContent
+    // 生成历史记录
+    const hist: EntryHistoryItem = {
+      id: uuid(), entryId: entry.id, content: entry.content, timestamp: now, userId: currentUserId.value
+    }
+    entry.historyRecords.push(hist)
+    entry.content = trim
     entry.updatedAt = now
-    const newVer = getEntryVersion(entry)
-    saveData()
-    showToast(`${t('saved')} v${newVer}`)
+    // 纯净词条入库 + 历史记录入库
+    await Promise.all([
+      saveEntryToDB(getPureEntry(entry)),
+      addHistoryToDB([hist])
+    ])
+    showToast(`${t('saved')} v${getEntryVersion(entry)}`)
   }
   editModal.value.visible = false
   refreshData()
 }
 
-// 删除/恢复词条
-const deleteEntry = (id: string): void => {
+// 删除词条
+const deleteEntry = async (id: string): Promise<void> => {
   const e = entryMap.value[id]
-  if (!e) return
-  if (!confirm(`${t('confirmDelete')}\n\n${e.content.substring(0, 60)}`)) return
+  if (!e || !confirm(`${t('confirmDelete')}\n\n${e.content.substring(0, 60)}`)) return
   e.isDeleted = true
   e.deletedAt = Date.now()
   e.updatedAt = Date.now()
-  saveData()
+  await saveEntryToDB(getPureEntry(e))
   showToast('🗑️ ' + t('deleted'))
   refreshData()
 }
-const restoreEntry = (id: string): void => {
+
+// 恢复词条
+const restoreEntry = async (id: string): Promise<void> => {
   const e = entryMap.value[id]
   if (!e || !e.isDeleted) return
   e.isDeleted = false
   e.deletedAt = null
   e.updatedAt = Date.now()
-  saveData()
+  await saveEntryToDB(getPureEntry(e))
   showToast('♻️ ' + t('restored'))
   refreshData()
 }
 
-// 历史版本
+// 打开历史弹窗
 const showHistory = (id: string): void => {
   historyEntry.value = entryMap.value[id]
   historyModalVisible.value = true
 }
-const restoreVersion = (entryId: string, historyItemId: number): void => {
+
+// 回滚历史版本
+const restoreVersion = async (entryId: string, historyItemId: string): Promise<void> => {
   const e = entryMap.value[entryId]
   if (!e) return
-  const hist = e.historyRecords?.find(h => h.id === historyItemId)
+  const hist = e.historyRecords.find(h => h.id === historyItemId)
   if (!hist) return
+
   const now = Date.now()
   // 当前内容存入历史
-  if (!e.historyRecords) e.historyRecords = []
-  e.historyRecords.push({
-    id: uuid(),
-    content: e.content,
-    timestamp: now,
-    userId: currentUserId.value
-  })
-  // 回滚到旧内容
+  const newHist: EntryHistoryItem = {
+    id: uuid(), entryId: e.id, content: e.content, timestamp: now, userId: currentUserId.value
+  }
+  e.historyRecords.push(newHist)
+  // 回滚内容
   e.content = hist.content
   e.updatedAt = now
-  const newVer = getEntryVersion(e)
-  saveData()
-  showToast(`${t('versionRestored')} → v${newVer}`)
+  // 入库
+  await Promise.all([
+    saveEntryToDB(getPureEntry(e)),
+    addHistoryToDB([newHist])
+  ])
+  const oldVer = getEntryHistoryVersion(e, historyItemId)
+  showToast(`${t('versionRestored')} v${oldVer} → v${getEntryVersion(e)}`)
   historyModalVisible.value = false
   refreshData()
 }
 
 // 面包屑导航
 const drillDownList = (entryId: string): void => {
-  const entry = entryMap.value[entryId]
-  if (!entry) return
-  breadcrumbStack.value.push({ id: entry.id, content: entry.content })
+  const e = entryMap.value[entryId]
+  if (e) breadcrumbStack.value.push({ id: e.id, content: e.content })
   refreshData()
 }
+
 const navBreadcrumb = (idx: number): void => {
-  if (idx < 0) {
-    breadcrumbStack.value = []
-    refreshData()
-    return
-  }
-  breadcrumbStack.value = breadcrumbStack.value.slice(0, idx + 1)
+  breadcrumbStack.value = idx < 0 ? [] : breadcrumbStack.value.slice(0, idx + 1)
   refreshData()
 }
 
@@ -721,59 +787,47 @@ const toggleRecycleBin = (): void => {
 const onSearch = (): void => {
   expandedIds.value.clear()
   if (searchQuery.value && viewMode.value === 'tree' && !showRecycleBin.value) {
-    const active = allEntries.value.filter(e => !e.isDeleted)
-    active.forEach(e => {
+    allEntries.value.filter(e => !e.isDeleted).forEach(e => {
       if (similarity(e.content, searchQuery.value) > SEARCH_SIMILARITY_THRESHOLD) {
-        let cur: Entry | null = e.parentId ? entryMap.value[e.parentId] : null
-        while (cur) {
-          expandedIds.value.add(cur.id)
-          cur = cur.parentId ? entryMap.value[cur.parentId] : null
-        }
+        let cur = e.parentId ? entryMap.value[e.parentId] : null
+        while (cur) { expandedIds.value.add(cur.id); cur = cur.parentId ? entryMap.value[cur.parentId] : null }
       }
     })
   }
   refreshData()
 }
+
 // ==================== 导入逻辑 ====================
 const triggerImport = (): void => {
-  if (importFileInput.value) {
-    importFileInput.value.value = ''
-    importFileInput.value.click()
-  }
+  if (importFileInput.value) { importFileInput.value.value = ''; importFileInput.value.click() }
 }
+
 const handleImportFile = (e: Event): void => {
   const target = e.target as HTMLInputElement
   const file = target.files?.[0]
   if (!file) return
   const ext = file.name.split('.').pop()?.toLowerCase()
   const reader = new FileReader()
-  reader.onload = (ev) => {
-    const text = ev.target?.result as string
+  reader.onload = async (ev) => {
     try {
-      let entries: Entry[] = []
-      if (ext === 'json') entries = parseJSON(text)
-      else if (ext === 'xml') entries = parseXML(text)
-      else if (ext === 'txt') entries = parseTXT(text)
-      else if (ext === 'yml' || ext === 'yaml') entries = parseYML(text)
-      else if (ext === 'properties') entries = parseProperties(text)
-      else if (ext === 'xlsx' || ext === 'xls') {
-        handleExcelImport(file)
-        return
-      } else if (ext === 'csv') entries = parseCSV(text)
-      else {
-        showToast('不支持该文件格式')
-        return
-      }
-      if (entries.length === 0) {
-        showToast('未解析到词条')
-        return
-      }
-      mergeImportedEntries(entries)
+      const text = ev.target?.result as string
+      let list: Entry[] = []
+      if (ext === 'json') list = parseJSON(text)
+      else if (ext === 'xml') list = parseXML(text)
+      else if (ext === 'txt') list = parseTXT(text)
+      else if (ext === 'yml' || ext === 'yaml') list = parseYML(text)
+      else if (ext === 'properties') list = parseProperties(text)
+      else if (ext === 'csv') list = parseCSV(text)
+      else if (ext === 'xlsx' || ext === 'xls') { await handleExcelImport(file); return }
+      else { showToast('不支持该文件格式'); return }
+      await smartMergeImport(list)
+      showToast(`${t('imported')} (${list.length} 条词条)`)
     } catch (err) {
       showToast('导入失败：' + (err as Error).message)
     }
   }
-  reader.readAsText(file)
+  if (ext === 'xlsx' || ext === 'xls') reader.readAsArrayBuffer(file)
+  else reader.readAsText(file)
 }
 
 // Excel导入
@@ -783,7 +837,7 @@ const handleExcelImport = async (file: File): Promise<void> => {
     return
   }
   const reader = new FileReader()
-  reader.onload = (ev) => {
+  reader.onload = async (ev) => {
     try {
       const data = new Uint8Array(ev.target?.result as ArrayBuffer)
       const wb = XLSX.read(data, { type: 'array' })
@@ -809,7 +863,7 @@ const handleExcelImport = async (file: File): Promise<void> => {
           const contIdx = headers2.indexOf('content')
           const timeIdx = headers2.indexOf('timestamp')
           const uidIdx = headers2.indexOf('userid')
-          const idIdx = headers3.indexOf('id')
+          const idIdx = headers2.indexOf('id')
           for (let i = 1; i < rows2.length; i++) {
             const row = rows2[i]
             if (!row) continue
@@ -900,9 +954,7 @@ const handleExcelImport = async (file: File): Promise<void> => {
           entry.copyRecords = copyMap[oldIdForEntry]
         }
       }
-      allEntries.value.push(...newEntries)
-      saveData()
-      showToast(`${t('imported')} (${newEntries.length} 条词条)`)
+      await smartMergeImport(newEntries)
       refreshData()
     } catch (err) {
       console.error(err)
@@ -912,23 +964,37 @@ const handleExcelImport = async (file: File): Promise<void> => {
   reader.readAsArrayBuffer(file)
 }
 
-// 导入合并ID映射
-const mergeImportedEntries = (newEntries: Entry[]): void => {
-  const idMap: Record<string, string> = {}
-  newEntries.forEach(e => {
-    const old = e.id
-    const nid = uuid()
-    idMap[old] = nid
-    e.id = nid
-  })
-  newEntries.forEach(e => {
-    if (e.parentId && idMap[e.parentId]) e.parentId = idMap[e.parentId]
-    // 导入无用户ID时填充当前用户
-    if (!e.userId) e.userId = currentUserId.value
-  })
-  allEntries.value.push(...newEntries)
-  saveData()
-  showToast(`${t('imported')} (${newEntries.length})`)
+/** 智能合并导入数据：ID存在对比updatedAt，新覆盖旧跳过；不存在新增 */
+const smartMergeImport = async (list: Entry[]): Promise<void> => {
+  const localMap = entryMap.value
+  const toAdd: Entry[] = []
+  const toUpdate: Entry[] = []
+
+  for (const item of list) {
+    const local = localMap[item.id]
+    if (!local) {
+      toAdd.push(item)
+      continue
+    }
+    // 本地存在同ID，导入更新时间更新则覆盖
+    if (item.updatedAt > local.updatedAt) {
+      local.content = item.content
+      local.parentId = item.parentId
+      local.isDeleted = item.isDeleted
+      local.deletedAt = item.deletedAt
+      local.createdAt = item.createdAt
+      local.updatedAt = item.updatedAt
+      local.userId = item.userId
+      toUpdate.push(local)
+    }
+  }
+
+  // 新增写入响应式列表并入库
+  for (const e of toAdd) allEntries.value.push(e)
+  for (const e of toAdd) await saveEntryToDB(getPureEntry(e))
+  // 更新现有词条
+  for (const e of toUpdate) await saveEntryToDB(getPureEntry(e))
+
   refreshData()
 }
 
@@ -940,12 +1006,29 @@ const parseJSON = (text: string): Entry[] => {
   const flatten = (nodes: any[], pid: string | null): void => {
     if (!Array.isArray(nodes)) return
     nodes.forEach(n => {
+      const entryId = n.id || uuid()
       const entry: Entry = {
-        id: n.id || uuid(),
+        id: entryId,
         parentId: pid || null,
         content: n.content || n.text || '',
-        history: Array.isArray(n.historyRecords) ? n.historyRecords : [],
-        copyRecords: Array.isArray(n.copyRecords) ? n.copyRecords : [],
+        historyRecords: Array.isArray(n.historyRecords)
+          ? n.historyRecords.map((h: any) => ({
+            id: h.id || uuid(),
+            entryId,
+            content: h.content,
+            timestamp: h.timestamp || now,
+            userId: h.userId || ''
+          }))
+          : [],
+        copyRecords: Array.isArray(n.copyRecords)
+          ? n.copyRecords.map((c: any) => ({
+            id: c.id || uuid(),
+            entryId,
+            content: c.content,
+            timestamp: c.timestamp || now,
+            userId: c.userId || ''
+          }))
+          : [],
         isDeleted: n.isDeleted || false,
         deletedAt: null,
         createdAt: n.createdAt || now,
@@ -971,8 +1054,9 @@ const parseXML = (text: string): Entry[] => {
     for (const child of node.children) {
       if (child.tagName === 'entry' || child.tagName === 'item') {
         const c = child.getAttribute('content') || child.textContent?.trim() || ''
+        const entryId = child.getAttribute('id') || uuid()
         const entry: Entry = {
-          id: child.getAttribute('id') || uuid(),
+          id: entryId,
           parentId: pid || null,
           content: c,
           historyRecords: [],
@@ -994,11 +1078,14 @@ const parseXML = (text: string): Entry[] => {
 const parseTXT = (text: string): Entry[] => {
   const lines = text.split('\n').filter(l => l.trim())
   const now = Date.now()
-  return lines.map(l => ({
-    id: uuid(), parentId: null, content: l.trim(),
-    historyRecords: [], copyRecords: [],
-    isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
-  }))
+  return lines.map(l => {
+    const eid = uuid()
+    return {
+      id: eid, parentId: null, content: l.trim(),
+      historyRecords: [], copyRecords: [],
+      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
+    }
+  })
 }
 const parseYML = (text: string): Entry[] => {
   const flat: Entry[] = []
@@ -1012,8 +1099,9 @@ const parseYML = (text: string): Entry[] => {
     if (!content) continue
     while (stack.length > 0 && stack[stack.length - 1].indent >= indent) stack.pop()
     const pid = stack.length > 0 ? stack[stack.length - 1].id : null
+    const eid = uuid()
     const entry: Entry = {
-      id: uuid(), parentId: pid, content,
+      id: eid, parentId: pid, content,
       historyRecords: [], copyRecords: [],
       isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
     }
@@ -1041,8 +1129,9 @@ const parseProperties = (text: string): Entry[] => {
       const pk = parts.slice(0, i + 1).join('.')
       if (pathMap[pk]) pid = pathMap[pk]
     }
+    const eid = uuid()
     const entry: Entry = {
-      id: uuid(), parentId: pid, content: val,
+      id: eid, parentId: pid, content: val,
       historyRecords: [], copyRecords: [],
       isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
     }
@@ -1064,8 +1153,9 @@ const parseCSV = (text: string): Entry[] => {
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(',').map(c => c.trim())
     if (!cols[contentCol]) continue
+    const eid = (idCol >= 0 && cols[idCol]) ? cols[idCol] : uuid()
     entries.push({
-      id: (idCol >= 0 && cols[idCol]) ? cols[idCol] : uuid(),
+      id: eid,
       parentId: (pidCol >= 0 && cols[pidCol]) ? cols[pidCol] : null,
       content: cols[contentCol],
       historyRecords: [],
@@ -1076,7 +1166,7 @@ const parseCSV = (text: string): Entry[] => {
   return entries
 }
 
-// ==================== 导出逻辑 ====================
+// ==================== 导出逻辑（完全不变） ====================
 const doExport = (format: 'json' | 'xml' | 'txt' | 'yml' | 'properties' | 'excel'): void => {
   showExportMenu.value = false
   const all = allEntries.value
@@ -1113,8 +1203,10 @@ const doExport = (format: 'json' | 'xml' | 'txt' | 'yml' | 'properties' | 'excel
         blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
         fn = `entries_${nowStr}.xlsx`
         break
+      default:
+        return
     }
-    const url = URL.createObjectURL(blob)
+    const url = URL.createObjectURL(blob!)
     const a = document.createElement('a')
     a.href = url
     a.download = fn
@@ -1238,10 +1330,9 @@ watch(currentTheme, () => setTheme());
 watch(currentLang, () => setLang());
 watch(showRecycleBin, () => refreshData());
 
-// 页面挂载初始化
-onMounted(() => {
+onMounted(async () => {
   loadSettings();
-  loadData();
+  await loadData();
   refreshData();
 });
 </script>

@@ -5,8 +5,8 @@
               {{ hasAnyChildren ? '▶' : '·' }}
             </span>
       <span class="content-text" @click="onClickContent" :title="entry.content">
-              {{ entry.isDeleted ? '🗑️ ' : '' }}{{ entry.content }}
-            </span>
+        {{ entry.isDeleted ? '🗑️ ' : '' }}{{ entry.content }}
+      </span>
       <span class="meta-tags">
             <span class="tag">v{{ (entry.historyRecords||[]).length + 1 }}</span>
             <span class="tag">✏️{{ (entry.historyRecords||[]).length }}</span>
@@ -22,26 +22,29 @@
           </span>
     </div>
     <template v-if="!breadcrumbMode && viewMode==='tree' && isExpanded">
-      <entry-row-renderer v-for="child in visibleChildren"
-                          :key="child.id"
-                          :entry="child"
-                          :depth="depth+1"
-                          :is-recycle="isRecycle"
-                          :force-show="isRecycle ? true : !child.isDeleted" :breadcrumb-mode="false"
-                          :expanded-ids="expandedIds"
-                          :view-mode="viewMode"
-                          :has-any-children-fn="hasAnyChildrenFn"
-                          :get-all-children-fn="getAllChildrenFn"
-                          :sort-score-fn="sortScoreFn"
-                          :is-top-deleted-fn="isTopDeletedFn"
-                          @copy="copyText"
-                          @add-child="addChild"
-                          @edit="editEntry"
-                          @history="showHistory"
-                          @delete="deleteEntry"
-                          @restore="restoreEntry"
-                          @update="$emit('update')">
-
+      <entry-row-renderer
+        v-for="child in visibleChildren"
+        :key="child.id"
+        :entry="child"
+        :depth="depth+1"
+        :is-recycle="isRecycle"
+        :force-show="isRecycle ? true : !child.isDeleted"
+        :breadcrumb-mode="false"
+        :expanded-ids="expandedIds"
+        :view-mode="viewMode"
+        :has-any-children-fn="hasAnyChildrenFn"
+        :get-all-children-fn="getAllChildrenFn"
+        :sort-score-fn="sortScoreFn"
+        :is-top-deleted-fn="isTopDeletedFn"
+        @copy="(childId) => emit('copy', childId)"
+        @add-child="(childId) => emit('add-child', childId)"
+        @edit="(childId) => emit('edit', childId)"
+        @history="(childId) => emit('history', childId)"
+        @delete="(childId) => emit('delete', childId)"
+        @restore="(childId) => emit('restore', childId)"
+        @drill="(childId) => emit('drill', childId)"
+        @update="$emit('update')"
+      >
       </entry-row-renderer>
     </template>
   </template>
@@ -52,7 +55,8 @@ import { computed, type ComputedRef } from 'vue'
 
 // 和父页面统一的词条类型
 interface EntryHistoryItem {
-  version: number
+  id: string
+  entryId: string
   content: string
   timestamp: number
   userId: string
@@ -61,10 +65,10 @@ interface EntryHistoryItem {
 /** 词条复制记录 */
 interface EntryCopyItem {
   id: string
-  version: number
+  entryId: string
+  content: string
   timestamp: number
   userId: string
-  entryId: string
 }
 
 /** 词条主体 */
@@ -72,9 +76,8 @@ interface Entry {
   id: string
   parentId: string | null
   content: string
-  version: number
-  historyRecords: EntryHistoryItem[] | []
-  copyRecords: EntryCopyItem[] | []
+  historyRecords: EntryHistoryItem[]
+  copyRecords: EntryCopyItem[]
   isDeleted: boolean
   deletedAt: number | null
   createdAt: number
@@ -142,7 +145,7 @@ const toggleExpand = () => {
   emit('update')
 }
 
-// 点击条目内容
+// 点击条目内容：面包屑模式下发drill事件，实现层级下钻
 const onClickContent = () => {
   if (props.breadcrumbMode) {
     emit('drill', props.entry.id)
@@ -151,7 +154,7 @@ const onClickContent = () => {
   }
 }
 
-// 操作事件转发
+// 操作事件：统一派发当前组件自身entry.id（当前行词条ID）
 const copyText = () => emit('copy', props.entry.id)
 const addChild = () => emit('add-child', props.entry.id)
 const editEntry = () => emit('edit', props.entry.id)
