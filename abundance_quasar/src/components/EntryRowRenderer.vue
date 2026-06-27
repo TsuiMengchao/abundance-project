@@ -14,6 +14,7 @@
       </span>
       <span class="actions" :class="{'always-visible': isRecycle}">
             <button class="btn btn-small icon-only" @click.stop="copyText" title="复制文本">📋</button>
+            <button class="btn btn-small icon-only" @click.stop="showDetail" title="查看详情">ℹ️</button>
             <button class="btn btn-small icon-only" @click.stop="addChild" title="新增子词条" v-if="!entry.isDeleted && !isRecycle">➕</button>
             <button class="btn btn-small icon-only" @click.stop="editEntry" title="编辑" v-if="!entry.isDeleted && !isRecycle">✏️</button>
             <button class="btn btn-small icon-only" @click.stop="showHistory" title="历史">📜</button>
@@ -43,6 +44,7 @@
         @delete="(childId) => emit('delete', childId)"
         @restore="(childId) => emit('restore', childId)"
         @drill="(childId) => emit('drill', childId)"
+        @detail="(childId) => emit('detail', childId)"
         @update="$emit('update')"
       >
       </entry-row-renderer>
@@ -83,6 +85,7 @@ interface Entry {
   createdAt: number
   updatedAt: number
   userId: string
+  updatorId: string
 }
 
 // Props 完整类型约束
@@ -111,6 +114,7 @@ const emit = defineEmits<{
   delete: [entryId: string]
   restore: [entryId: string]
   drill: [entryId: string]
+  detail: [entryId: string]
 }>()
 
 // 简写绑定
@@ -161,6 +165,7 @@ const editEntry = () => emit('edit', props.entry.id)
 const showHistory = () => emit('history', props.entry.id)
 const deleteEntry = () => emit('delete', props.entry.id)
 const restoreEntry = () => emit('restore', props.entry.id)
+const showDetail = () => emit('detail', props.entry.id)
 </script>
 
 <style scoped>

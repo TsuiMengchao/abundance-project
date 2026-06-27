@@ -76,6 +76,8 @@
                                 @history="showHistory"
                                 @delete="deleteEntry"
                                 @restore="restoreEntry"
+                                @drill="drillDownList"
+                                @detail="showDetail"
                                 @update="refreshData">
             </entry-row-renderer>
           </template>
@@ -97,6 +99,7 @@
                                 @delete="deleteEntry"
                                 @restore="restoreEntry"
                                 @drill="drillDownList"
+                                @detail="showDetail"
                                 @update="refreshData">
             </entry-row-renderer>
           </template>
@@ -159,6 +162,66 @@
       </div>
 
       <div class="toast" v-if="toastMsg" @click="toastMsg=''">{{ toastMsg }}</div>
+
+      <!-- 词条详情弹窗 仅展示 -->
+      <div class="modal-overlay" v-if="detailModalVisible" @click.self="detailModalVisible=false">
+        <div class="modal" style="max-width:700px;max-height:80vh;overflow:auto;">
+          <h3>ℹ️ {{ t('entryDetail') }}</h3>
+          <div v-if="detailEntry" class="detail-content">
+            <div class="detail-row">
+              <label>ID：</label>
+              <span>{{ detailEntry.id }}</span>
+            </div>
+            <div class="detail-row">
+              <label>父ID：</label>
+              <span>{{ detailEntry.parentId ?? '无（根词条）' }}</span>
+            </div>
+            <div class="detail-row">
+              <label>内容：</label>
+              <div style="white-space:pre-wrap;word-break:break-all;background:var(--bg2);padding:8px;border-radius:4px;">{{ detailEntry.content }}</div>
+            </div>
+            <div class="detail-row">
+              <label>当前版本：</label>
+              <span>v{{ getEntryVersion(detailEntry) }}</span>
+            </div>
+            <div class="detail-row">
+              <label>编辑次数：</label>
+              <span>{{ (detailEntry.historyRecords || []).length }}</span>
+            </div>
+            <div class="detail-row">
+              <label>复制次数：</label>
+              <span>{{ (detailEntry.copyRecords || []).length }}</span>
+            </div>
+            <div class="detail-row">
+              <label>创建时间：</label>
+              <span>{{ formatTime(detailEntry.createdAt) }}</span>
+            </div>
+            <div class="detail-row">
+              <label>最后更新：</label>
+              <span>{{ formatTime(detailEntry.updatedAt) }}</span>
+            </div>
+            <div class="detail-row">
+              <label>创建用户ID：</label>
+              <span>{{ detailEntry.userId }}</span>
+            </div>
+            <div class="detail-row">
+              <label>更新用户ID：</label>
+              <span>{{ detailEntry.updatorId }}</span>
+            </div>
+            <div class="detail-row">
+              <label>是否已删除：</label>
+              <span>{{ detailEntry.isDeleted ? '是' : '否' }}</span>
+            </div>
+            <div class="detail-row" v-if="detailEntry.isDeleted">
+              <label>删除时间：</label>
+              <span>{{ detailEntry.deletedAt ? formatTime(detailEntry.deletedAt) : '-' }}</span>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn" @click="detailModalVisible=false">{{ t('close') }}</button>
+          </div>
+        </div>
+      </div>
     </div>
   </q-page>
 </template>
@@ -199,6 +262,7 @@ interface Entry {
   createdAt: number
   updatedAt: number
   userId: string
+  updatorId: string
 }
 
 interface EditModalState {
@@ -218,6 +282,9 @@ interface BreadcrumbItem {
   id: string
   content: string
 }
+
+const detailModalVisible = ref<boolean>(false)
+const detailEntry = ref<Entry | null>(null)
 
 // ==================== IndexedDB 封装工具 ====================
 const DB_NAME = 'EntryReaderDB'
@@ -264,7 +331,8 @@ const getPureEntry = (e: Entry): Omit<Entry, 'historyRecords' | 'copyRecords'> =
   deletedAt: e.deletedAt,
   createdAt: e.createdAt,
   updatedAt: e.updatedAt,
-  userId: e.userId
+  userId: e.userId,
+  updatorId: e.updatorId,
 })
 
 /** 保存单条主词条（内部自动浅拷贝剥离Vue Proxy） */
@@ -454,7 +522,10 @@ const importFileInput = ref<HTMLInputElement | null>(null)
 const editModal = ref<EditModalState>({
   visible: false, mode: 'add', parentId: null, entryId: null, content: ''
 })
-
+const showDetail = (entryId: string) => {
+  detailEntry.value = entryMap.value[entryId]
+  detailModalVisible.value = true
+}
 // ==================== 计算属性 ====================
 const entryMap: ComputedRef<Record<string, Entry>> = computed(() => {
   return Object.fromEntries(allEntries.value.map(e => [e.id, e]))
@@ -671,7 +742,7 @@ const submitEditModal = async (): Promise<void> => {
     const added: Entry[] = lines.map(line => ({
       id: uuid(), parentId, content: line.trim(),
       historyRecords: [], copyRecords: [], isDeleted: false, deletedAt: null,
-      createdAt: now, updatedAt: now, userId: currentUserId.value
+      createdAt: now, updatedAt: now, userId: currentUserId.value, updatorId: currentUserId.value
     }))
     allEntries.value.push(...added)
     // 逐条提取纯净对象入库
@@ -693,6 +764,7 @@ const submitEditModal = async (): Promise<void> => {
     }
     entry.historyRecords.push(hist)
     entry.content = trim
+    entry.updatorId = currentUserId.value
     entry.updatedAt = now
     // 纯净词条入库 + 历史记录入库
     await Promise.all([
@@ -919,6 +991,7 @@ const handleExcelImport = async (file: File): Promise<void> => {
       const isDeletedCol = headers1.indexOf('isdeleted')
       const deletedAtCol = headers1.indexOf('deletedat')
       const uidCol = headers1.indexOf('userid')
+      const updatorId = headers1.indexOf('updatorId')
       if (contentCol < 0) {
         showToast('表格缺少content列')
         return
@@ -939,6 +1012,7 @@ const handleExcelImport = async (file: File): Promise<void> => {
           copyRecords: [],
           historyRecords: [],
           userId: (uidCol >= 0 && row[uidCol]) ? String(row[uidCol]) : currentUserId.value,
+          updatorId: (updatorId >= 0 && row[updatorId]) ? String(row[updatorId]) : currentUserId.value,
           createdAt: (createdAtCol >= 0) ? (new Date(row[createdAtCol]).getTime() || now) : now,
           updatedAt: (updatedAtCol >= 0) ? (new Date(row[updatedAtCol]).getTime() || now) : now,
           isDeleted: (isDeletedCol >= 0) ? (String(row[isDeletedCol]).toLowerCase() === 'true') : false,
@@ -992,6 +1066,7 @@ const smartMergeImport = async (list: Entry[]): Promise<void> => {
       local.createdAt = item.createdAt
       local.updatedAt = item.updatedAt
       local.userId = item.userId
+      local.updatorId = item.updatorId
       toUpdate.push(local)
     }
   }
@@ -1040,7 +1115,8 @@ const parseJSON = (text: string): Entry[] => {
         deletedAt: null,
         createdAt: n.createdAt || now,
         updatedAt: n.updatedAt || now,
-        userId: n.userId || currentUserId.value
+        userId: n.userId || currentUserId.value,
+        updatorId: n.updatorId || currentUserId.value
       }
       flat.push(entry)
       if (n.children) flatten(n.children, entry.id)
@@ -1072,7 +1148,8 @@ const parseXML = (text: string): Entry[] => {
           deletedAt: null,
           createdAt: now,
           updatedAt: now,
-          userId: currentUserId.value
+          userId: currentUserId.value,
+          updatorId: currentUserId.value
         }
         flat.push(entry)
         parseNode(child, flat[flat.length - 1].id)
@@ -1090,7 +1167,7 @@ const parseTXT = (text: string): Entry[] => {
     return {
       id: eid, parentId: null, content: l.trim(),
       historyRecords: [], copyRecords: [],
-      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
+      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value, updatorId: currentUserId.value
     }
   })
 }
@@ -1110,7 +1187,7 @@ const parseYML = (text: string): Entry[] => {
     const entry: Entry = {
       id: eid, parentId: pid, content,
       historyRecords: [], copyRecords: [],
-      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
+      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value, updatorId: currentUserId.value
     }
     flat.push(entry)
     stack.push({ indent, id: entry.id })
@@ -1140,7 +1217,7 @@ const parseProperties = (text: string): Entry[] => {
     const entry: Entry = {
       id: eid, parentId: pid, content: val,
       historyRecords: [], copyRecords: [],
-      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
+      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value, updatorId: currentUserId.value
     }
     flat.push(entry)
     pathMap[key] = entry.id
@@ -1167,7 +1244,7 @@ const parseCSV = (text: string): Entry[] => {
       content: cols[contentCol],
       historyRecords: [],
       copyRecords: [],
-      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value
+      isDeleted: false, deletedAt: null, createdAt: now, updatedAt: now, userId: currentUserId.value, updatorId: currentUserId.value
     })
   }
   return entries
@@ -1236,9 +1313,9 @@ const buildTreeForExport = (entries: Entry[]): { entries: ExportTreeItem[] } => 
     else roots.push(map[e.id])
   })
   const clean = (n: ExportTreeItem): ExportTreeItem => {
-    const { id, parentId, content, historyRecords, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted, children } = n
-    if (!children || children.length === 0) return { id, parentId, content, historyRecords, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted }
-    return { id, parentId, content, historyRecords, copyRecords, userId, createdAt, updatedAt, deletedAt, isDeleted, children: children.map(clean) }
+    const { id, parentId, content, historyRecords, copyRecords, userId, updatorId, createdAt, updatedAt, deletedAt, isDeleted, children } = n
+    if (!children || children.length === 0) return { id, parentId, content, historyRecords, copyRecords, userId, updatorId, createdAt, updatedAt, deletedAt, isDeleted }
+    return { id, parentId, content, historyRecords, copyRecords, userId, updatorId, createdAt, updatedAt, deletedAt, isDeleted, children: children.map(clean) }
   }
   return { entries: roots.map(clean) }
 }
@@ -1250,7 +1327,7 @@ const buildXML = (entries: Entry[]): string => {
   const render = (e: Entry, ind: number): void => {
     const s = '  '.repeat(ind)
     const esc = escapeXml(e.content)
-    xml += `${s}<entry id="${e.id}" parentId="${e.parentId || ''}" content="${esc}" userId="${e.userId}" isDeleted="${e.isDeleted}">\n`
+    xml += `${s}<entry id="${e.id}" parentId="${e.parentId || ''}" content="${esc}" userId="${e.userId}" updatorId="${e.updatorId}" isDeleted="${e.isDeleted}">\n`
     const children = entries.filter(c => c.parentId === e.id)
     children.forEach(c => render(c, ind + 1))
     xml += `${s}</entry>\n`
@@ -1293,13 +1370,14 @@ const buildProperties = (entries: Entry[]): string => {
 };
 const buildExcel = (entries: Entry[]): Uint8Array => {
   // 主词条表
-  const mainRows: (string | number | null)[][] = [['id', 'parentId', 'content', 'userId', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']];
+  const mainRows: (string | number | null)[][] = [['id', 'parentId', 'content', 'userId', 'updatorId', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']];
   entries.forEach(e => {
     mainRows.push([
       e.id,
       e.parentId || '',
       e.content,
       e.userId,
+      e.updatorId,
       new Date(e.createdAt).toISOString(),
       new Date(e.updatedAt).toISOString(),
       e.isDeleted ? 'true' : 'false',
@@ -1603,5 +1681,21 @@ select.btn {
   .search-input { width: 130px; }
   /* 注意：原样式中 .entry-row .actions 在移动端强制可见，此处保留 */
   .entry-row .actions { opacity: 1; }
+}
+
+.detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+.detail-row {
+  display: flex;
+  gap: 8px;
+}
+.detail-row label {
+  min-width: 100px;
+  font-weight: 500;
+  color: var(--text2);
 }
 </style>
