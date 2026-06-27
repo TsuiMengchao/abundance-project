@@ -22,6 +22,7 @@ export default {
   emptyRecycle: "回收站为空",
   emptyHint: "暂无词条",
   addFirst: "新增第一个词条",
+  addChild: "添加子词条",
   noChildren: "暂无子词条",
   addHere: "在此新增",
   historyFor: "历史版本",

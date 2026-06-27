@@ -21,6 +21,7 @@ export default {
   emptyRecycle: "Recycle bin empty",
   emptyHint: "No entries",
   addFirst: "Add first",
+  addChild: "Add child entry",
   noChildren: "No children",
   addHere: "Add here",
   historyFor: "History for",

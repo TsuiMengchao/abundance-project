@@ -21,6 +21,7 @@ export default {
   emptyRecycle: "回收桶為空",
   emptyHint: "暫無詞條",
   addFirst: "新增第一個詞條",
+  addChild: "新增子詞條",
   noChildren: "暫無子詞條",
   addHere: "在此新增",
   historyFor: "歷史版本",

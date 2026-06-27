@@ -98,14 +98,19 @@
                                 @restore="restoreEntry"
                                 @drill="drillDownList"
                                 @update="refreshData">
-
             </entry-row-renderer>
           </template>
         </div>
         <div class="empty-state" v-else>
           <span class="icon">{{ showRecycleBin ? '🗑️' : '📭' }}</span>
-          <span>{{ showRecycleBin ? t('emptyRecycle') : t('emptyHint') }}</span>
-          <button class="btn accent" v-if="!showRecycleBin" @click="addChild(null)">＋ {{ t('addFirst') }}</button>
+          <span>{{ showRecycleBin ? t('emptyRecycle') : breadcrumbStack.length ? t('noChildren') : t('emptyHint') }}</span>
+          <button
+            class="btn accent"
+            v-if="!showRecycleBin"
+            @click="addChild(viewMode === 'breadcrumb' && breadcrumbStack.length ? breadcrumbStack.at(-1)!.id : null)"
+          >
+            ＋ {{ viewMode === 'breadcrumb' && breadcrumbStack.length ? t('addChild') : t('addFirst') }}
+          </button>
         </div>
       </div>
 
@@ -759,12 +764,14 @@ const restoreVersion = async (entryId: string, historyItemId: string): Promise<v
 
 // 面包屑导航
 const drillDownList = (entryId: string): void => {
+  console.log("drillDownList", breadcrumbStack)
   const e = entryMap.value[entryId]
   if (e) breadcrumbStack.value.push({ id: e.id, content: e.content })
   refreshData()
 }
 
 const navBreadcrumb = (idx: number): void => {
+  console.log("navBreadcrumb", breadcrumbStack)
   breadcrumbStack.value = idx < 0 ? [] : breadcrumbStack.value.slice(0, idx + 1)
   refreshData()
 }
