@@ -24,6 +24,7 @@
         <button class="btn" @click="openUserIdModal">👤 {{ currentUserId || 'Set UserID' }}</button>
         <button class="btn" @click="triggerImport">📥 {{ t('import') }}</button>
         <button class="btn" @click="showExportMenu = !showExportMenu">📤 {{ t('export') }}</button>
+        <button class="btn" @click="openSyncModal">🔁 {{ t('syncCloud') || '云端同步' }}</button>
         <div v-if="showExportMenu" class="modal-overlay" @click.self="showExportMenu=false" style="position:fixed;inset:0;z-index:250;">
           <div class="modal" style="max-width:360px;">
             <h3>{{ t('exportAs') }}</h3>
@@ -222,6 +223,51 @@
           </div>
         </div>
       </div>
+
+      <!-- 云端同步弹窗 -->
+      <div class="modal-overlay" v-if="syncModal.visible" @click.self="closeSyncModal">
+        <div class="modal" style="width: 620px; max-height: 85vh;">
+          <h3>🔁 云端同步配置</h3>
+          <div class="sync-form">
+            <div class="form-row">
+              <label>后端接口地址：</label>
+              <input v-model="syncConfig.baseUrl" placeholder="http://127.0.0.1:5000" style="width:100%;padding:6px;">
+            </div>
+            <div class="form-row">
+              <label>同步用户ID（和后端userId匹配）：</label>
+              <input v-model="syncConfig.userId" readonly style="width:100%;padding:6px;background:#eee;">
+            </div>
+            <div class="form-row">
+              <label>是否公开：</label>
+              <label class="switch">
+                <input type="checkbox" v-model="syncConfig.isPublic">
+                <span class="slider round"></span>
+              </label>
+            </div>
+            <div style="margin:8px 0;">
+              <button class="btn" @click="confirmSyncConfig">保存配置</button>
+            </div>
+          </div>
+
+          <div class="sync-buttons" style="display:flex;gap:8px;margin:12px 0;">
+            <button class="btn accent" @click="syncDownload" :disabled="syncModal.loading">
+              ⬇️ 下载同步（拉取后端）
+            </button>
+            <button class="btn accent" @click="syncUpload" :disabled="syncModal.loading">
+              ⬆️ 上传同步（推送本地）
+            </button>
+          </div>
+
+          <div class="sync-log" style="border:1px solid #ccc;padding:8px;min-height:200px;max-height:300px;overflow:auto;background:#111;color:#0f0;font-family:monospace;font-size:12px;">
+            <div v-for="log in syncModal.log" :key="log">{{ log }}</div>
+            <div v-if="syncModal.log.length === 0">同步日志将展示在这里...</div>
+          </div>
+
+          <div class="modal-actions" style="margin-top:12px;">
+            <button class="btn" @click="closeSyncModal" :disabled="syncModal.loading">关闭</button>
+          </div>
+        </div>
+      </div>
     </div>
   </q-page>
 </template>
@@ -281,6 +327,28 @@ interface UserIdModalState {
 interface BreadcrumbItem {
   id: string
   content: string
+}
+
+// 后端统一返回结构
+interface ApiResp<T> {
+  code: number
+  msg: string
+  data: T
+}
+
+// 同步配置
+interface SyncConfig {
+  baseUrl: string
+  userId: string
+  isPublic: boolean
+}
+
+// 同步弹窗状态
+interface SyncModalState {
+  visible: boolean
+  loading: boolean
+  syncType: 'upload' | 'download' | null
+  log: string[]
 }
 
 const detailModalVisible = ref<boolean>(false)
@@ -522,6 +590,21 @@ const importFileInput = ref<HTMLInputElement | null>(null)
 const editModal = ref<EditModalState>({
   visible: false, mode: 'add', parentId: null, entryId: null, content: ''
 })
+
+// 同步配置，持久化localStorage
+const SYNC_CONFIG_KEY = 'entry-sync-config'
+const syncConfig = ref<SyncConfig>({
+  baseUrl: window.location.origin,
+  userId: currentUserId.value,
+  isPublic: true
+})
+const syncModal = ref<SyncModalState>({
+  visible: false,
+  loading: false,
+  syncType: null,
+  log: []
+})
+
 const showDetail = (entryId: string) => {
   detailEntry.value = entryMap.value[entryId]
   detailModalVisible.value = true
@@ -660,6 +743,29 @@ const loadSettings = (): void => {
     currentUserId.value = localStorage.getItem(USER_ID_KEY) || 'anonymous'
   } catch {}
   setTheme()
+}
+
+// 加载同步配置
+const loadSyncConfig = () => {
+  try {
+    const raw = localStorage.getItem(SYNC_CONFIG_KEY)
+    if (raw) {
+      const cfg = JSON.parse(raw)
+      syncConfig.value.baseUrl = cfg.baseUrl || window.location.origin
+      syncConfig.value.userId = cfg.userId || currentUserId.value
+      syncConfig.value.isPublic = cfg.isPublic || false
+    }
+  } catch {}
+}
+
+// 保存同步配置
+const saveSyncConfig = () => {
+  localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(syncConfig.value))
+}
+
+// 同步日志追加
+const addSyncLog = (msg: string) => {
+  syncModal.value.log.push(`[${new Date().toLocaleTimeString()}] ${msg}`)
 }
 
 // 主题切换
@@ -1409,6 +1515,152 @@ const buildExcel = (entries: Entry[]): Uint8Array => {
   return new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
 };
 
+/** 基础请求封装 */
+const apiRequest = async <T>(
+  path: string,
+  method: 'GET' | 'POST' = 'GET',
+  body?: any
+): Promise<ApiResp<T>> => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  }
+  const url = `${syncConfig.value.baseUrl}${path}`
+  const opt: RequestInit = { method, headers }
+  if (method === 'POST' && body) {
+    opt.body = JSON.stringify({
+      userId: syncConfig.value.userId,
+      ...body
+    })
+  }
+  const res = await fetch(url, opt)
+  const json = await res.json()
+  if (json.code !== 200) throw new Error(json.msg || '接口请求失败')
+  return json
+}
+
+/** 从后端下载同步数据 */
+const syncDownload = async () => {
+  const cfg = syncConfig.value
+  if (!cfg.baseUrl) return showToast('请填写后端服务地址')
+  if (!cfg.userId) return showToast('同步用户ID不能为空')
+
+  syncModal.value.loading = true
+  syncModal.value.syncType = 'download'
+  syncModal.value.log = []
+  addSyncLog('开始从后端拉取当前用户全部词条数据...')
+
+  try {
+    // 1. 请求后端接口获取该userId下所有Entry、历史、复制记录
+    const resp = await apiRequest<{
+      entries: Omit<Entry, 'historyRecords' | 'copyRecords'>[]
+      historyRecords: EntryHistoryItem[]
+      copyRecords: EntryCopyItem[]
+    }>(`/api/sync?userId=${encodeURIComponent(syncConfig.value.userId)}`, 'GET')
+    const { entries, historyRecords, copyRecords } = resp.data
+    addSyncLog(`后端获取主词条：${entries.length} 条`)
+    addSyncLog(`后端获取历史记录：${historyRecords.length} 条`)
+    addSyncLog(`后端获取复制记录：${copyRecords.length} 条`)
+
+    // 2. 组装完整Entry结构（和loadAllFromDB逻辑一致）
+    const histMap: Record<string, EntryHistoryItem[]> = {}
+    const copyMap: Record<string, EntryCopyItem[]> = {}
+    historyRecords.forEach(h => {
+      if (!histMap[h.entryId]) histMap[h.entryId] = []
+      histMap[h.entryId].push(h)
+    })
+    copyRecords.forEach(c => {
+      if (!copyMap[c.entryId]) copyMap[c.entryId] = []
+      copyMap[c.entryId].push(c)
+    })
+    const remoteEntries: Entry[] = entries.map(pure => ({
+      ...pure,
+      historyRecords: histMap[pure.id] ?? [],
+      copyRecords: copyMap[pure.id] ?? []
+    }))
+
+    // 3. 智能合并（复用导入逻辑）
+    const beforeCount = allEntries.value.length
+    await smartMergeImport(remoteEntries)
+    const afterCount = allEntries.value.length
+    addSyncLog(`本地合并完成，词条总数：${beforeCount} → ${afterCount}`)
+
+    // 4. 单独入库后端新增/更新的历史、复制记录
+    await addHistoryToDB(historyRecords)
+    await addCopyToDB(copyRecords)
+    addSyncLog('历史、复制记录已同步写入本地IndexedDB')
+
+    refreshData()
+    addSyncLog('✅ 下载同步完成')
+  } catch (err) {
+    const errMsg = (err as Error).message
+    addSyncLog(`❌ 同步失败：${errMsg}`)
+    showToast(`同步失败：${errMsg}`)
+  } finally {
+    syncModal.value.loading = false
+  }
+}
+
+/** 本地数据上传同步到后端 */
+const syncUpload = async () => {
+  const cfg = syncConfig.value
+  if (!cfg.baseUrl) return showToast('请填写后端服务地址')
+  if (!cfg.userId) return showToast('同步用户ID不能为空')
+
+  syncModal.value.loading = true
+  syncModal.value.syncType = 'upload'
+  syncModal.value.log = []
+  addSyncLog('开始上传本地全部词条至后端...')
+
+  try {
+    // 拆分主表、历史、复制记录
+    const pureEntries = allEntries.value.map(getPureEntry)
+    const allHistory: EntryHistoryItem[] = []
+    const allCopy: EntryCopyItem[] = []
+    allEntries.value.forEach(e => {
+      allHistory.push(...e.historyRecords)
+      allCopy.push(...e.copyRecords)
+    })
+
+    addSyncLog(`待上传主词条：${pureEntries.length} 条`)
+    addSyncLog(`待上传历史记录：${allHistory.length} 条`)
+    addSyncLog(`待上传复制记录：${allCopy.length} 条`)
+
+    // 调用后端批量保存接口
+    await apiRequest('/api/upload', 'POST', {
+      userId: syncConfig.value.userId,
+      isPublic: syncConfig.value.isPublic,
+      entries: pureEntries,
+      historyRecords: allHistory,
+      copyRecords: allCopy
+    })
+    addSyncLog('✅ 上传同步完成，后端已接收全部本地数据')
+  } catch (err) {
+    const errMsg = (err as Error).message
+    addSyncLog(`❌ 上传失败：${errMsg}`)
+    showToast(`上传失败：${errMsg}`)
+  } finally {
+    syncModal.value.loading = false
+  }
+}
+
+// 打开同步配置弹窗
+const openSyncModal = () => {
+  syncModal.value.visible = true
+  syncModal.value.log = []
+  // 同步配置userId跟随当前登录用户
+  syncConfig.value.userId = currentUserId.value
+}
+// 关闭同步弹窗
+const closeSyncModal = () => {
+  if (syncModal.value.loading) return showToast('同步进行中，无法关闭')
+  syncModal.value.visible = false
+}
+// 保存同步地址配置
+const confirmSyncConfig = () => {
+  saveSyncConfig()
+  showToast('同步配置已保存')
+}
+
 // 监听配置
 watch(viewMode, () => saveSettings());
 watch(currentTheme, () => setTheme());
@@ -1417,6 +1669,7 @@ watch(showRecycleBin, () => refreshData());
 
 onMounted(async () => {
   loadSettings();
+  loadSyncConfig()
   await loadData();
   refreshData();
 });
@@ -1697,5 +1950,41 @@ select.btn {
   min-width: 100px;
   font-weight: 500;
   color: var(--text2);
+}
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 26px;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+}
+.slider:before {
+  content: "";
+  position: absolute;
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+input:checked + .slider {
+  background: #007bff;
+}
+input:checked + .slider:before {
+  transform: translateX(22px);
 }
 </style>
